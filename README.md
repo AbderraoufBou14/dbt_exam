@@ -1,90 +1,70 @@
-# Mission : audit technique et plan de refactoring du moteur Raw Vault
+Nous allons maintenant préparer le développement du ticket DF6DFM-75 à partir de ton rapport d'audit technique.
 
-Tu es un Data Engineer senior spécialisé en Python, PySpark, Hive et architecture logicielle.
+Ton rapport constitue notre base de travail. Avant de développer, je souhaite approfondir plusieurs points critiques et recueillir tes recommandations techniques.
 
-Nous devons faire évoluer le module `src/Tools/raw_vault_tests/` pour compléter les contrôles fonctionnels, améliorer la maintenabilité et les performances, et partitionner les tables d'audit.
+Tu disposes d'un accès direct au code et aux dépendances du projet : utilise-le pour vérifier tes hypothèses et proposer les solutions les plus adaptées, sans te limiter aux pistes que je mentionne.
 
-Le lead développeur a autorisé :
-- L'implémentation des contrôles manquants.
-- Le refactoring de `engine.py`, actuellement trop volumineux.
-- Une modularisation raisonnable.
-- L'optimisation des traitements.
-- Le partitionnement de `audit_run`, `audit_result` et `audit_detail` par date d'exécution.
+### 1. Construction des clés et contrôle MAS → HUB
 
-## Étape demandée : analyse uniquement
+Explore les traitements Raw Vault réels pour comprendre la construction des clés SAT et MAS, notamment dans la bibliothèque `icdcpatternvault`, les fonctions techniques partagées et les configurations JSON.
 
-Examine le code et ses dépendances réelles, notamment :
+Identifie :
+- Les HK propres aux MAS et SAT.
+- Les clés représentant leurs HUB parents.
+- Les règles de calcul et de rattachement réellement utilisées.
+- La manière correcte d'implémenter `MAS_HK_ABSENT_HUB`.
 
-- `engine.py`
-- `controls.py`
-- `analyzer.py`
-- Les configurations JSON Raw Vault.
-- Les tests automatisés existants.
-- Les définitions et écritures des tables d'audit.
-- Les scripts de lancement et le packaging si nécessaire.
+Appuie tes conclusions sur le code et les configurations, avec les chemins et fonctions concernés.
 
-## Travaux à réaliser
+Utilise notamment l'objet métier `couru` comme exemple concret.
 
-**1. Cartographie**
+### 2. Partitionnement des tables d'audit
 
-Identifier les responsabilités des fonctions existantes, leurs appels, les dépendances et les duplications de logique.
+Nous devons conserver l'historique actuel de `AUDIT_RUN`, `AUDIT_RESULT` et `AUDIT_DETAIL`, qui contient des exécutions réelles des audits de comptage et de qualité.
 
-**2. Couverture fonctionnelle**
+Étudie les différentes stratégies possibles pour passer à des tables partitionnées par date d'exécution.
 
-Comparer les contrôles existants aux spécifications disponibles.
+Évalue en particulier une migration non destructive avec tables intermédiaires, reprise des données existantes, validation et bascule contrôlée.
 
-Point déjà identifié : `MAS_HK_ABSENT_HUB` semble absent, alors qu'il est demandé dans l'Excel.
+Vérifie la cohérence de la date de partition entre les trois tables pour un même `run_id`, la compatibilité Spark/Hive/Impala et les impacts sur le dashboard.
 
-Vérifier aussi les autres exigences, notamment les comparaisons entre sources et SAT/MAS, sans inventer de règles.
+Recommande la solution la plus sûre et la plus simple à maintenir dans notre environnement.
 
-**3. Refactoring**
+### 3. Compatibilité des points d'entrée
 
-Proposer une architecture simple, avec un nombre limité de modules spécialisés et une séparation claire entre configuration, logique de contrôle, orchestration et persistance.
+L'actuel `controls.py` est utilisé comme point d'entrée Spark par le KSH.
 
-**4. Performances**
+Réévalue ta proposition de modularisation pour minimiser les changements d'interfaces et préserver le lancement, le packaging et les imports existants.
 
-Identifier les opérations Spark potentiellement coûteuses et les structures Python inutilement complexes.
+Je privilégie une architecture claire mais sans sur-modularisation.
 
-Distinguer les optimisations démontrables des hypothèses nécessitant un benchmark.
+### 4. Stratégie de tests
 
-**5. Partitionnement des audits**
+Propose une stratégie de validation comprenant :
+- Tests unitaires des nouvelles fonctions.
+- Tests des cas OK, KO et erreurs.
+- Tests de non-régression après refactoring.
+- Tests d'intégration avec les tables d'audit.
+- Validation sur les objets métier en DEV puis en RECETTE.
+- Mesures avant/après pour les optimisations Spark pertinentes.
 
-Localiser les schémas Hive et les écritures Spark des trois tables.
+Réutilise autant que possible les tests existants.
 
-Proposer un partitionnement journalier cohérent avec `run_id`, l'historique existant et les usages Hue/Impala.
+### 5. Revalidation du rapport
 
-Décrire les impacts DDL, migration, écriture, lecture, compatibilité et tests.
+Vérifie la branche Git active et explique pourquoi le rapport mentionne `feature/DF6DFM-547_Hub_Flux_Financiers`, alors que l'analyse était destinée au ticket DF6DFM-75.
 
-**6. Plan de développement**
+Revérifie également la matrice des contrôles : elle annonce cinq contrôles qualité manquants, alors que six lignes paraissent signalées comme manquantes.
 
-Fournir un plan en étapes limitées, chacune comportant :
-- Objectif.
-- Fichiers concernés.
-- Modifications nécessaires.
-- Risques.
-- Tests associés.
-- Critères de validation.
+### Résultat attendu
 
-## Contraintes
+Je souhaite un complément d'analyse concis, avec :
+- Tes conclusions vérifiées dans le code.
+- Les risques et points d'incertitude.
+- Tes recommandations argumentées.
+- Les éventuelles décisions nécessitant validation humaine.
+- Une proposition actualisée des premières étapes de développement.
 
-- Ne modifier aucun fichier.
-- Ne lancer aucun job Spark.
-- Ne modifier aucune table Hive.
-- Ne pas installer de dépendances.
-- Ne pas changer la version du package.
-- Ne pas créer de commit.
-- Ne pas inventer des fonctions ou schémas absents du dépôt.
-- Préserver le comportement existant tant que le changement n'est pas explicitement décidé.
+Notre objectif est de livrer un travail fiable, propre et maintenable en RECETTE d'ici le 20 novembre 2026, sans refactoring disproportionné ni optimisation non mesurée.
 
-## Résultat attendu
-
-Un rapport Markdown court mais techniquement précis, avec :
-
-1. Cartographie de l'existant.
-2. Matrice des contrôles présents/manquants.
-3. Architecture cible proposée.
-4. Opportunités d'optimisation classées par priorité.
-5. Stratégie de partitionnement des audits.
-6. Plan de modifications incrémentales.
-
-Indique clairement les décisions qui doivent être validées avant de commencer le développement.
+Pour cette étape, reste en lecture seule : aucune modification de code, aucune création/suppression de table et aucune exécution avec effet sur les données.
