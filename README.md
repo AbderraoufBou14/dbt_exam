@@ -1,123 +1,188 @@
-# [DF6 - PREX] Raw Vault – Flux Financiers – Complément V2 – DF6DFM-547
+# DF6DFM-75 — Initialisation de session et cartographie technique
 
-Bonjour,
+Nous reprenons les travaux sur le module `src/Tools/raw_vault_tests/` du projet DF6.
 
-Dans le cadre de l'évolution du Datahub Finance de marché (DF6), merci de procéder à la livraison en **pré-exploitation (PREX)** du deuxième lot du HUB Flux Financiers.
+Deux documents ont été ajoutés au contexte de cette session :
+- Un document de passation technique issu de l'analyse précédente.
+- Un document de contexte applicatif DF6.
 
-Cette évolution consiste à ajouter **5 nouveaux MAS** alimentés par les sources SI3 Résultat de cession, Résultat de cession FIFO et Produits FI YTD DOPE, ainsi qu'à mettre en place **6 jobs Control-M** pour leurs alimentations récurrentes.
+## 1. Ta mission pour cette première étape
 
-**Environnement physique : PREX**
+Prends connaissance des deux documents, puis explore en **lecture seule** le code réellement disponible dans le workspace.
 
-## 1. Livraison du package applicatif DF6
+L'objectif est de construire une cartographie fiable des fichiers, fonctions, configurations et dépendances nécessaires pour les prochains développements.
 
-Merci de livrer en PREX le package DF6 suivant, à partir de la version disponible et validée en RECETTE :
+**IMPORTANT :**
+- Ne commence aucune implémentation.
+- Ne modifie aucun fichier.
+- Ne lance aucun refactoring.
+- Ne crée aucun test ou script.
+- Ne réalise aucun commit, push ou opération de déploiement.
+- Ne lance aucun traitement Spark ou audit réel.
+- Ne génère pas de nouveau rapport Markdown dans le dépôt.
 
-- Application : `bigdata-datahub_finance-df6-batch`
-- Package : `df6-<VERSION_VALIDÉE>.tar.gz`
-- Source : `<CHEMIN_SAS_DU_PACKAGE_RECETTE>`
-- Environnement cible : PREX
-- Serveur cible : `<SERVEUR_PREX_À_CONFIRMER>`
+Tu peux utiliser les commandes de consultation et d'inspection nécessaires.
 
-## 2. Initialisation des nouveaux objets Raw Vault
+## 2. Décisions techniques déjà retenues
 
-Merci de procéder à la création des nouveaux objets Hive et à leur chargement initial à l'aide du shell :
+Les points suivants ont été arbitrés après l'analyse précédente.
 
-`PDDF6AJR0_RAW_VAULT.KSH`
+**D1 — MAS → HUB**
 
-Les traitements doivent être lancés **séquentiellement, sans parallélisation des LOAD**, car plusieurs alimentations écrivent dans le HUB commun Flux Financiers.
+Le contrôle `MAS_HK_ABSENT_HUB` doit être conçu en considérant les différentes configurations MAS : mono-HUB, multi-HUB et avec CDK.
 
-Date technique d'initialisation : `<DATE_VALIDÉE_AAAAMMJJ>`
+La comparaison directe entre HK MAS et HK HUB ne doit pas être généralisée sans vérification.
 
-### Résultat de cession quotidien
+Examine les mécanismes réels de construction des clés dans les patterns Data Vault du projet et les métadonnées JSON.
 
-`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t create -c raw -b resultat_cession_quot true`
+Pour les cas complexes, identifie les solutions techniquement fiables, les données disponibles et les éventuelles limites.
 
-`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t load -c raw -b resultat_cession_quot true`
+**D2 — Partitionnement des audits**
 
-### Résultat de cession mensuel
+Stratégie retenue : migration non destructive.
 
-`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t create -c raw -b resultat_cession_mens true`
+- Créer des tables V2 partitionnées.
+- Reprendre l'historique existant.
+- Vérifier l'intégrité des données migrées.
+- Effectuer une bascule contrôlée après validation.
 
-`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t load -c raw -b resultat_cession_mens true`
+Les tables existantes `AUDIT_RUN`, `AUDIT_RESULT` et `AUDIT_DETAIL` doivent être préservées pendant cette phase.
 
-### Résultat de cession FIFO
+**D3 — Colonne de partition**
 
-`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t create -c raw -b resultat_cession_fifo_quot true`
+Orientation retenue : `partition_date STRING`, format `yyyy-MM-dd`.
 
-`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t load -c raw -b resultat_cession_fifo_quot true`
+Vérifier sa compatibilité avec les conventions du projet, Spark, Hive et Impala avant implémentation.
 
-### Produits FI YTD DOPE quotidien
+**D4 — Ordre de développement**
 
-`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t create -c raw -b produits_fi_ytd_dope_quot true`
+1. Implémentation des contrôles fonctionnels manquants.
+2. Refactoring progressif.
+3. Partitionnement et migration des tables d'audit.
+4. Optimisations complémentaires validées par mesures.
 
-`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t load -c raw -b produits_fi_ytd_dope_quot true`
+**D5 — Périmètre fonctionnel**
 
-### Produits FI YTD DOPE mensuel
+Le périmètre inclut :
+- `MAS_HK_ABSENT_HUB`.
+- Les cinq contrôles de comparaison avec les sources identifiés comme manquants dans la spécification.
 
-`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t create -c raw -b produits_fi_ytd_dope_mens true`
+Retrouve leurs définitions exactes dans les documents et configurations disponibles. Ne considère pas leurs identifiants proposés précédemment comme définitifs.
 
-`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t load -c raw -b produits_fi_ytd_dope_mens true`
+**D6 — Performances Spark**
 
-**Attention :** le HUB `hrv_flux_financiers` existe déjà et est partagé avec les alimentations du premier lot. Ne pas supprimer ni réinitialiser les données existantes du HUB. Vérifier l'impact des opérations CREATE avant leur lancement.
+Établir une référence de performance avant optimisation.
 
-## 3. Création des six boîtes Control-M
+Ne pas modifier pour l'instant les paramètres Spark, notamment `spark.sql.autoBroadcastJoinThreshold`.
 
-Merci de créer les six boîtes suivantes, conformément au dossier d'exploitation Control-M DF6 et au schéma d'ordonnancement joints ou référencés.
+Les optimisations futures devront être justifiées techniquement et, lorsque possible, mesurées avant/après.
 
-| Job DF6 | Condition de déclenchement (fin du job SI3) | Groupe KSH |
-|---|---|---|
-| `XDDF6AJR25_RESULTAT_CESSION_QUOT` | `XDSI3AJL21_RESCESEOD` | `resultat_cession_quot` |
-| `XDDF6AJR25_RESULTAT_CESSION_INTRA` | `XDSI3AJL21RESCES_INTRA` | `resultat_cession_quot` |
-| `XDDF6AJR25_RESULTAT_CESSION_MENS` | `XDSI3AJL22_RESCESEOM` | `resultat_cession_mens` |
-| `XDDF6AJR26_RESULTAT_CESSION_FIFO_INTRA` | `XDSI3AJL23_RESCESFIFO_INTRA` | `resultat_cession_fifo_quot` |
-| `XDDF6AJR27_PRODUITS_FI_YTD_DOPE_QUOT` | `XDSI3AJL24_PRDFINYTDQUOT` | `produits_fi_ytd_dope_quot` |
-| `XDDF6AJR27_PRODUITS_FI_YTD_DOPE_MENS` | `XDSI3AJL25_PRDFINYTDMENS` | `produits_fi_ytd_dope_mens` |
+## 3. Contraintes d'architecture
 
-Pour chaque boîte, utiliser les paramètres d'exécution récurrente suivants :
+Le module actuel fonctionne dans un écosystème comprenant GitLab, Spark/PySpark, Hive/Impala, HDFS, des configurations JSON et un lancement par KSH.
 
-- PARM 1 : `-d date_ctrlm`
-- PARM 2 : `-t load`
-- PARM 3 : `-c raw`
-- PARM 4 : `-b <GROUPE_FONCTIONNEL>`
-- PARM 5 : `false`
+`src/Tools/raw_vault_tests/controls.py` est un point d'entrée utilisé par le lancement Spark/YARN.
 
-Condition Control-M de sortie à reprendre conformément au dossier d'exploitation : `TOPJOB_XDDF6FIN`.
+**Il doit rester compatible avec l'existant.**
 
-Les périodicités et autres caractéristiques de chaque boîte sont précisées dans les fiches Control-M.
+Le refactoring devra rester raisonnable : séparation des responsabilités, réduction des duplications, mais sans multiplication inutile de modules.
 
-## 4. Contraintes d'exécution et exclusions
+Les interfaces publiques, tests existants, écritures d'audit et mécanismes de packaging sont à préserver.
 
-Les nouveaux jobs alimentent le HUB partagé :
+Le code réel fait autorité sur les hypothèses des documents. Si tu détectes une divergence, signale-la avec les références précises.
 
-`hrv_flux_financiers`
+## 4. Cartographie attendue
 
-Merci de prendre en compte les contraintes suivantes :
+Explore les endroits pertinents du dépôt pour identifier :
 
-- Ne pas exécuter simultanément plusieurs chargements écrivant dans ce HUB.
-- Prévoir les exclusions entre les six nouveaux jobs, ainsi qu'avec les alimentations existantes du premier lot : Dividendes, Échéanciers et Flux passés.
-- Respecter les dépendances SI3 indiquées dans le dossier Control-M et dans le schéma draw.io.
-- Respecter les périodicités et calendriers définis pour chaque traitement.
+**A. Moteur d'audit**
+- Points d'entrée.
+- Orchestration.
+- Fonctions de contrôle.
+- Modèles et structures de données.
+- Lecture des configurations.
+- Gestion des résultats OK/KO/ERROR et des détails.
 
-## 5. Mise au plan des boîtes Control-M
+**B. Construction Data Vault**
+- Code de génération des HK HUB, SAT, MAS et LINK.
+- Traitement des BK, CDK, discriminants et hashdiff.
+- Patterns de chargement et relations entre composants.
+- Différences importantes entre MAS mono-HUB, multi-HUB et avec CDK.
 
-Après création et vérification des six boîtes, merci de procéder à leur mise au plan conformément au calendrier et aux conditions définis dans le dossier d'exploitation.
+**C. Métadonnées et sources**
+- Configurations JSON des objets métier.
+- Références entre tables.
+- Mappings source → Raw Vault.
+- Informations nécessaires aux contrôles source manquants.
 
-## 6. Vérifications et retour d'intervention
+**D. Persistance et exploitation**
+- Création et écriture dans les tables d'audit.
+- DDL existants.
+- Dashboard et requêtes Impala.
+- Scripts KSH, packaging et dépendances pouvant être affectés.
 
-Merci de confirmer :
+**E. Tests**
+- Localisation des tests existants.
+- Couverture actuellement disponible.
+- Fixtures et mécanismes de simulation Spark.
+- Points où ajouter les futurs tests sans casser l'existant.
 
-- La version applicative effectivement installée en PREX.
-- La création et le chargement initial des cinq MAS.
-- La bonne conservation des objets et données préexistants du HUB Flux Financiers.
-- La création des six boîtes Control-M.
-- La configuration des dépendances SI3 et des exclusions.
-- La mise au plan des traitements.
+**F. Git et environnement**
+- Vérifier la branche active, attendue : `feature/test_75_qualité_de_données` (utiliser le nom réellement présent).
+- Signaler les éventuelles modifications locales.
+- Identifier la différence éventuelle entre le code source du dépôt et les versions installées dans `bin/`.
 
-En cas d'échec, merci de conserver les logs et de signaler les anomalies à l'équipe DF6 afin d'organiser les actions nécessaires.
+Évite toute exploration exhaustive des environnements virtuels ou dépendances volumineuses : inspecte uniquement les fichiers pertinents.
 
-**Documents de référence :**
-- Dossier d'exploitation Control-M DF6 mis à jour.
-- Schéma Control-M DF6 mis à jour.
-- Référence du ticket Godzilla `DF6DFM-547`.
+## 5. Format de ton retour
 
-Merci.
+Produis une réponse concise et structurée :
+
+**1. Compréhension générale**
+Un résumé du rôle du module et de son fonctionnement actuel, en 5 à 10 lignes.
+
+**2. Cartographie des fichiers**
+
+Un tableau avec :
+- Chemin du fichier.
+- Responsabilité.
+- Fonctions ou éléments importants.
+- Utilité pour notre développement.
+- Risque ou dépendance éventuelle.
+
+Classe les fichiers en trois catégories :
+- Essentiels.
+- À consulter lors du développement.
+- Secondaires.
+
+**3. Cartographie du flux d'exécution**
+
+Présente simplement la chaîne :
+
+KSH → point d'entrée Python → chargement configurations → exécution contrôles → écriture audit → consultation Hue/dashboard.
+
+**4. Points techniques sensibles**
+
+Signale uniquement les points importants à surveiller : compatibilité, calcul des clés, mappings sources, tests, persistance et migration.
+
+Distingue :
+- Ce qui est confirmé par le code.
+- Ce qui reste à vérifier.
+
+**5. Préparation de la prochaine étape**
+
+Identifie précisément les fichiers que tu devras examiner ou modifier pour commencer le contrôle `MAS_HK_ABSENT_HUB`.
+
+Ne fournis pas encore de code.
+
+## 6. Consignes de travail
+
+Sois rigoureux, mais pragmatique.
+
+Tu as accès directement au code : utilise cet avantage pour vérifier les faits et challenger les conclusions des documents précédents.
+
+Ne considère pas les propositions d'architecture antérieures comme des obligations si tu identifies une solution plus simple ou plus fiable.
+
+Évite de reproduire un audit technique complet déjà réalisé. Nous cherchons principalement une **carte de navigation du projet et une compréhension partagée**.
+
+À la fin, arrête-toi et attends mon prochain feu vert avant toute implémentation.
