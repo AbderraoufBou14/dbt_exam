@@ -1,15 +1,13 @@
-Merci pour ce premier développement. L'implémentation des MAS mono-HUB et les tests constituent une bonne base.
+Le développement du contrôle MAS_HK_ABSENT_HUB me paraît prêt pour une validation finale.
 
-Avant de valider le lot et d'effectuer le commit, je souhaite approfondir deux points fonctionnels :
+Avant le premier commit, effectue une revue rapide et ciblée des trois points suivants :
 
-1. **MAS multi-HUB et avec CDK** : notre objectif est de prévoir une logique de contrôle fiable pour ces configurations. Actuellement, le retour systématique ERROR risque de faire échouer l'exécution KSH. Examine la possibilité de contrôler le rattachement indirectement via MAS → LINK → HUB, en réutilisant les relations et contrôles existants. Vérifie les mappings et les clés réels. Ne remplace pas ERROR par un faux OK.
+1. Vérifie que le LINK utilisé pour les MAS multi-HUB correspond exactement aux clés et relations métier déclarées dans les configurations, sans correspondance ambiguë.
+2. Vérifie que la résolution des HUB hors répertoire de configuration sélectionne de façon déterministe la bonne table physique.
+3. Vérifie qu'aucun cas non contrôlé n'est silencieusement considéré comme OK.
 
-2. **Références ignorées** : identifie les cas où le HUB parent n'est pas trouvé dans les configurations. Vérifie que ce comportement ne masque pas silencieusement des contrôles attendus. Donne le nombre de relations concernées dans le périmètre analysé.
+Relance uniquement les tests pertinents et présente le résultat, les fichiers modifiés et les éventuelles réserves.
 
-Je souhaite une solution pragmatique et compatible avec le moteur actuel, sans refactoring général.
+Ne modifie le code que si une anomalie concrète est identifiée. Pas de refactoring supplémentaire ni de nouvelle exploration générale.
 
-Si une correction fiable est possible, implémente-la avec les tests ciblés correspondants.
-
-Ensuite, présente un bilan concis : couverture fonctionnelle réelle, cas non couverts, tests exécutés et fichiers modifiés.
-
-Ne lance pas de traitement distant et n'effectue pas encore de commit.
+Ne crée pas encore de commit : je le ferai après validation du diff.
