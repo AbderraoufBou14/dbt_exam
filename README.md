@@ -1,146 +1,123 @@
-# DF6 — Dossier Control-M
-## Complément du HUB Flux Financiers — DF6DFM-547
+# [DF6 - PREX] Raw Vault – Flux Financiers – Complément V2 – DF6DFM-547
 
-**Version :** Brouillon V1 — Revue technique à effectuer  
-**Périmètre :** 5 MAS Raw Vault — 6 jobs Control-M proposés  
-**Famille :** `XDDF6AJR25`
+Bonjour,
 
----
+Dans le cadre de l'évolution du Datahub Finance de marché (DF6), merci de procéder à la livraison en **pré-exploitation (PREX)** du deuxième lot du HUB Flux Financiers.
 
-## Fiche 1 — XDDF6AJR25_RESULTAT_CESSION_QUOT
+Cette évolution consiste à ajouter **5 nouveaux MAS** alimentés par les sources SI3 Résultat de cession, Résultat de cession FIFO et Produits FI YTD DOPE, ainsi qu'à mettre en place **6 jobs Control-M** pour leurs alimentations récurrentes.
 
-| Rubrique | Description |
-|---|---|
-| **Script** | `XDDF6AJR0_RAW_VAULT.KSH` |
-| **Description** | Alimentation de la zone RAW de DF6, avec le chargement du HUB Flux Financiers et du MAS Résultat de cession quotidien. |
-| **Tables sources (Hive)** | `db_prod_si3.lac_pvo_pdt_fi_resultat_cession_eod_delta` |
-| | `db_prod_si3.lac_pvo_pdt_fi_resultat_cession_eod_delta_histo` |
-| **Tables alimentées** | `db_prod_df6_brute.hrv_flux_financiers` |
-| | `db_prod_df6_brute.mrv_resultat_cession_quot` |
-| **Périodicité** | Quotidien — EOD (calendrier à confirmer) |
-| **Condition de déclenchement** | FIN du job `XDSI3AJL21_RESCESEOD` |
-| **Condition Control-M de sortie** | `TOPJOB_XDDF6FIN` |
-| **Accès concurrent** | Non |
-| **Consignes de reprise** | Voir Liste des consignes (chapitre 5) |
-| **Autres informations** | Exécution exclusive des autres alimentations du HUB Flux Financiers |
-| **Paramètres** | `-d date_ctrlm -t load -c raw -b resultat_cession_quot false` |
+**Environnement physique : PREX**
 
----
+## 1. Livraison du package applicatif DF6
 
-## Fiche 2 — XDDF6AJR25_RESULTAT_CESSION_INTRA
+Merci de livrer en PREX le package DF6 suivant, à partir de la version disponible et validée en RECETTE :
 
-| Rubrique | Description |
-|---|---|
-| **Script** | `XDDF6AJR0_RAW_VAULT.KSH` |
-| **Description** | Alimentation intraday de la zone RAW de DF6, avec le chargement du HUB Flux Financiers et du MAS Résultat de cession quotidien. |
-| **Tables sources (Hive)** | `db_prod_si3.lac_pvo_pdt_fi_resultat_cession_eod_delta` |
-| | `db_prod_si3.lac_pvo_pdt_fi_resultat_cession_eod_delta_histo` |
-| **Tables alimentées** | `db_prod_df6_brute.hrv_flux_financiers` |
-| | `db_prod_df6_brute.mrv_resultat_cession_quot` |
-| **Périodicité** | Intraday — calendrier à confirmer |
-| **Condition de déclenchement** | FIN du job `XDSI3AJL21RESCES_INTRA` |
-| **Condition Control-M de sortie** | `TOPJOB_XDDF6FIN` |
-| **Accès concurrent** | Non |
-| **Consignes de reprise** | Voir Liste des consignes (chapitre 5) |
-| **Autres informations** | Ne pas exécuter simultanément avec le job EOD ni les autres alimentations du HUB Flux Financiers |
-| **Paramètres** | `-d date_ctrlm -t load -c raw -b resultat_cession_quot false` |
+- Application : `bigdata-datahub_finance-df6-batch`
+- Package : `df6-<VERSION_VALIDÉE>.tar.gz`
+- Source : `<CHEMIN_SAS_DU_PACKAGE_RECETTE>`
+- Environnement cible : PREX
+- Serveur cible : `<SERVEUR_PREX_À_CONFIRMER>`
 
-**Remarque :** les fiches 1 et 2 utilisent le même groupe `-b` et alimentent le même MAS, comme les jobs EOD et INTRA du premier lot. L'orthographe du nom SI3 INTRA est à revérifier dans Control-M.
+## 2. Initialisation des nouveaux objets Raw Vault
 
----
+Merci de procéder à la création des nouveaux objets Hive et à leur chargement initial à l'aide du shell :
 
-## Fiche 3 — XDDF6AJR25_RESULTAT_CESSION_MENS
+`PDDF6AJR0_RAW_VAULT.KSH`
 
-| Rubrique | Description |
-|---|---|
-| **Script** | `XDDF6AJR0_RAW_VAULT.KSH` |
-| **Description** | Alimentation de la zone RAW de DF6, avec le chargement du HUB Flux Financiers et du MAS Résultat de cession mensuel. |
-| **Tables sources (Hive)** | `db_prod_si3.lac_pvo_pdt_fi_resultat_cession_eom_delta` |
-| | `db_prod_si3.lac_pvo_pdt_fi_resultat_cession_eom_delta_histo` |
-| **Tables alimentées** | `db_prod_df6_brute.hrv_flux_financiers` |
-| | `db_prod_df6_brute.mrv_resultat_cession_mens` |
-| **Périodicité** | Mensuel — calendrier à confirmer |
-| **Condition de déclenchement** | FIN du job `XDSI3AJL22_RESCESEOM` |
-| **Condition Control-M de sortie** | `TOPJOB_XDDF6FIN` |
-| **Accès concurrent** | Non |
-| **Consignes de reprise** | Voir Liste des consignes (chapitre 5) |
-| **Autres informations** | Exécution exclusive des autres alimentations du HUB Flux Financiers |
-| **Paramètres** | `-d date_ctrlm -t load -c raw -b resultat_cession_mens false` |
+Les traitements doivent être lancés **séquentiellement, sans parallélisation des LOAD**, car plusieurs alimentations écrivent dans le HUB commun Flux Financiers.
 
----
+Date technique d'initialisation : `<DATE_VALIDÉE_AAAAMMJJ>`
 
-## Fiche 4 — XDDF6AJR25_RESULTAT_CESSION_FIFO_INTRA
+### Résultat de cession quotidien
 
-| Rubrique | Description |
-|---|---|
-| **Script** | `XDDF6AJR0_RAW_VAULT.KSH` |
-| **Description** | Alimentation de la zone RAW de DF6, avec le chargement du HUB Flux Financiers et du MAS Résultat de cession FIFO quotidien. |
-| **Tables sources (Hive)** | `db_prod_si3.lac_pvo_pdt_fi_resultat_cession_fifo_eod_delta` |
-| | `db_prod_si3.lac_pvo_pdt_fi_resultat_cession_fifo_eod_delta_histo` |
-| **Tables alimentées** | `db_prod_df6_brute.hrv_flux_financiers` |
-| | `db_prod_df6_brute.mrv_resultat_cession_fifo_quot` |
-| **Périodicité** | Intraday — calendrier à confirmer |
-| **Condition de déclenchement** | FIN du job `XDSI3AJL23_RESCESFIFO_INTRA` |
-| **Condition Control-M de sortie** | `TOPJOB_XDDF6FIN` |
-| **Accès concurrent** | Non |
-| **Consignes de reprise** | Voir Liste des consignes (chapitre 5) |
-| **Autres informations** | Exécution exclusive des autres alimentations du HUB Flux Financiers |
-| **Paramètres** | `-d date_ctrlm -t load -c raw -b resultat_cession_fifo_quot false` |
+`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t create -c raw -b resultat_cession_quot true`
 
-**Remarque :** la fiche SI3 disponible concerne `RE​SCESFIFO_INTRA`, bien que la source porte le suffixe EOD et que la périodicité inscrite dans le document soit Mensuel. Un éventuel job FIFO EOD distinct n'a pas encore été identifié.
+`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t load -c raw -b resultat_cession_quot true`
 
----
+### Résultat de cession mensuel
 
-## Fiche 5 — XDDF6AJR25_PRODUITS_FI_YTD_DOPE_QUOT
+`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t create -c raw -b resultat_cession_mens true`
 
-| Rubrique | Description |
-|---|---|
-| **Script** | `XDDF6AJR0_RAW_VAULT.KSH` |
-| **Description** | Alimentation de la zone RAW de DF6, avec le chargement du HUB Flux Financiers et du MAS Produits FI YTD DOPE quotidien. |
-| **Tables sources (Hive)** | `db_prod_si3.lac_pvo_produits_fi_ytd_dope_quot_delta` |
-| | `db_prod_si3.lac_pvo_produits_fi_ytd_dope_quot_delta_histo` |
-| **Tables alimentées** | `db_prod_df6_brute.hrv_flux_financiers` |
-| | `db_prod_df6_brute.mrv_produits_fi_ytd_dope_quot` |
-| **Périodicité** | Quotidien — calendrier à confirmer |
-| **Condition de déclenchement** | FIN du job `XDSI3AJL24_PRDFINYTDQUOT` |
-| **Condition Control-M de sortie** | `TOPJOB_XDDF6FIN` |
-| **Accès concurrent** | Non |
-| **Consignes de reprise** | Voir Liste des consignes (chapitre 5) |
-| **Autres informations** | Exécution exclusive des autres alimentations du HUB Flux Financiers |
-| **Paramètres** | `-d date_ctrlm -t load -c raw -b produits_fi_ytd_dope_quot false` |
+`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t load -c raw -b resultat_cession_mens true`
 
-**Remarque :** la fiche SI3 du job `PRDFINYTDQUOT` indique Mensuel, malgré son suffixe QUOT. La périodicité proposée doit être confirmée.
+### Résultat de cession FIFO
 
----
+`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t create -c raw -b resultat_cession_fifo_quot true`
 
-## Fiche 6 — XDDF6AJR25_PRODUITS_FI_YTD_DOPE_MENS
+`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t load -c raw -b resultat_cession_fifo_quot true`
 
-| Rubrique | Description |
-|---|---|
-| **Script** | `XDDF6AJR0_RAW_VAULT.KSH` |
-| **Description** | Alimentation de la zone RAW de DF6, avec le chargement du HUB Flux Financiers et du MAS Produits FI YTD DOPE mensuel. |
-| **Tables sources (Hive)** | `db_prod_si3.lac_pvo_produits_fi_ytd_dope_mens_delta` |
-| | `db_prod_si3.lac_pvo_produits_fi_ytd_dope_mens_delta_histo` |
-| **Tables alimentées** | `db_prod_df6_brute.hrv_flux_financiers` |
-| | `db_prod_df6_brute.mrv_produits_fi_ytd_dope_mens` |
-| **Périodicité** | Mensuel — calendrier à confirmer |
-| **Condition de déclenchement** | FIN du job `XDSI3AJL25_PRDFINYTDMENS` |
-| **Condition Control-M de sortie** | `TOPJOB_XDDF6FIN` |
-| **Accès concurrent** | Non |
-| **Consignes de reprise** | Voir Liste des consignes (chapitre 5) |
-| **Autres informations** | Exécution exclusive des autres alimentations du HUB Flux Financiers |
-| **Paramètres** | `-d date_ctrlm -t load -c raw -b produits_fi_ytd_dope_mens false` |
+### Produits FI YTD DOPE quotidien
 
----
+`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t create -c raw -b produits_fi_ytd_dope_quot true`
 
-## Notes communes pour la revue du brouillon
+`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t load -c raw -b produits_fi_ytd_dope_quot true`
 
-1. **Numérotation :** `JR25` est retenu comme disponible. Les noms fonctionnels complets des six nouveaux jobs restent des propositions.
-2. **Condition de sortie :** la valeur `TOPJOB_XDDF6FIN` reprend la précision communiquée. Dans les fiches Word du lot 1, le libellé affiché est « TOP JOB XDDF6FIN » ; vérifier si la représentation doit rester identique.
-3. **Accès concurrent :** les six jobs doivent respecter l'exclusion avec les alimentations existantes `JR21`, `JR22`, `JR23`, ainsi qu'entre eux, puisqu'ils écrivent dans le HUB commun.
-4. **Périodicités :** les termes QUOT, MENS et INTRA constituent la base du brouillon. Les calendriers effectifs seront précisés par l'exploitation.
-5. **Correspondances SI3 :** elles sont reconstituées à partir des tables produites et de la logique observée dans le lot 1.
-6. **Fichier de configuration :** les noms des tables `_delta` et `_delta_histo` sont repris dans la description comme dans les anciennes fiches ; cela ne signifie pas que les deux sont systématiquement lues à chaque `LOAD` récurrent.
-7. **Cas FIFO :** une seule fiche est proposée à ce stade. La présence éventuelle d'un job SI3 FIFO EOD supplémentaire devra être vérifiée avant validation définitive.
+### Produits FI YTD DOPE mensuel
 
-**Bilan : six fiches Control-M pour cinq MAS, dont deux jobs EOD et INTRA alimentant `mrv_resultat_cession_quot`.**
+`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t create -c raw -b produits_fi_ytd_dope_mens true`
+
+`./PDDF6AJR0_RAW_VAULT.KSH -d <DATE> -t load -c raw -b produits_fi_ytd_dope_mens true`
+
+**Attention :** le HUB `hrv_flux_financiers` existe déjà et est partagé avec les alimentations du premier lot. Ne pas supprimer ni réinitialiser les données existantes du HUB. Vérifier l'impact des opérations CREATE avant leur lancement.
+
+## 3. Création des six boîtes Control-M
+
+Merci de créer les six boîtes suivantes, conformément au dossier d'exploitation Control-M DF6 et au schéma d'ordonnancement joints ou référencés.
+
+| Job DF6 | Condition de déclenchement (fin du job SI3) | Groupe KSH |
+|---|---|---|
+| `XDDF6AJR25_RESULTAT_CESSION_QUOT` | `XDSI3AJL21_RESCESEOD` | `resultat_cession_quot` |
+| `XDDF6AJR25_RESULTAT_CESSION_INTRA` | `XDSI3AJL21RESCES_INTRA` | `resultat_cession_quot` |
+| `XDDF6AJR25_RESULTAT_CESSION_MENS` | `XDSI3AJL22_RESCESEOM` | `resultat_cession_mens` |
+| `XDDF6AJR26_RESULTAT_CESSION_FIFO_INTRA` | `XDSI3AJL23_RESCESFIFO_INTRA` | `resultat_cession_fifo_quot` |
+| `XDDF6AJR27_PRODUITS_FI_YTD_DOPE_QUOT` | `XDSI3AJL24_PRDFINYTDQUOT` | `produits_fi_ytd_dope_quot` |
+| `XDDF6AJR27_PRODUITS_FI_YTD_DOPE_MENS` | `XDSI3AJL25_PRDFINYTDMENS` | `produits_fi_ytd_dope_mens` |
+
+Pour chaque boîte, utiliser les paramètres d'exécution récurrente suivants :
+
+- PARM 1 : `-d date_ctrlm`
+- PARM 2 : `-t load`
+- PARM 3 : `-c raw`
+- PARM 4 : `-b <GROUPE_FONCTIONNEL>`
+- PARM 5 : `false`
+
+Condition Control-M de sortie à reprendre conformément au dossier d'exploitation : `TOPJOB_XDDF6FIN`.
+
+Les périodicités et autres caractéristiques de chaque boîte sont précisées dans les fiches Control-M.
+
+## 4. Contraintes d'exécution et exclusions
+
+Les nouveaux jobs alimentent le HUB partagé :
+
+`hrv_flux_financiers`
+
+Merci de prendre en compte les contraintes suivantes :
+
+- Ne pas exécuter simultanément plusieurs chargements écrivant dans ce HUB.
+- Prévoir les exclusions entre les six nouveaux jobs, ainsi qu'avec les alimentations existantes du premier lot : Dividendes, Échéanciers et Flux passés.
+- Respecter les dépendances SI3 indiquées dans le dossier Control-M et dans le schéma draw.io.
+- Respecter les périodicités et calendriers définis pour chaque traitement.
+
+## 5. Mise au plan des boîtes Control-M
+
+Après création et vérification des six boîtes, merci de procéder à leur mise au plan conformément au calendrier et aux conditions définis dans le dossier d'exploitation.
+
+## 6. Vérifications et retour d'intervention
+
+Merci de confirmer :
+
+- La version applicative effectivement installée en PREX.
+- La création et le chargement initial des cinq MAS.
+- La bonne conservation des objets et données préexistants du HUB Flux Financiers.
+- La création des six boîtes Control-M.
+- La configuration des dépendances SI3 et des exclusions.
+- La mise au plan des traitements.
+
+En cas d'échec, merci de conserver les logs et de signaler les anomalies à l'équipe DF6 afin d'organiser les actions nécessaires.
+
+**Documents de référence :**
+- Dossier d'exploitation Control-M DF6 mis à jour.
+- Schéma Control-M DF6 mis à jour.
+- Référence du ticket Godzilla `DF6DFM-547`.
+
+Merci.
