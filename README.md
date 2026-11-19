@@ -1,16 +1,37 @@
-Prends connaissance des trois fichiers Markdown fournis pour comprendre le contexte applicatif, le moteur de contrôles Raw Vault, les travaux réalisés et les évolutions attendues.
+## Refactoring du moteur de contrôles Raw Vault
 
-Appuie-toi prioritairement sur ces documents. Consulte uniquement les fichiers du workspace nécessaires pour vérifier les informations essentielles, sans exploration exhaustive.
+Nous avons terminé une première implémentation du contrôle `MAS_HK_ABSENT_HUB`. Avant de développer les cinq contrôles fonctionnels restants, nous souhaitons améliorer la structure du moteur existant.
 
-Produis un **rapport synthétique de compréhension** couvrant :
-1. L'architecture et le fonctionnement du moteur d'audit.
-2. La cartographie des principaux fichiers et leurs responsabilités.
-3. Les contrôles existants, récemment développés et encore manquants.
-4. Les besoins techniques : refactoring, partitionnement, performances et tests.
-5. Les décisions déjà prises, les contraintes et les points restant à vérifier.
+Tu disposes du code complet et des documents de contexte. **Je te laisse analyser et choisir l'approche de refactoring la plus pertinente**, en fonction des responsabilités réelles, des dépendances et des conventions du projet.
 
-Distingue les faits vérifiés des informations issues des handovers et des hypothèses.
+### Objectifs
 
-**Lecture seule : aucune modification, aucun test, aucune opération Git ou déploiement.**
+- Améliorer la modularité, la lisibilité et la maintenabilité.
+- Clarifier la séparation des responsabilités et réduire les duplications.
+- Faciliter l'ajout des futurs contrôles sans complexifier davantage le moteur.
+- Préserver les performances et éviter la sur-ingénierie.
 
-Réponds directement dans la conversation, en **600 mots maximum**, sans créer de fichier. Arrête-toi après le rapport.
+### Contraintes
+
+- Refactoring à comportement fonctionnel constant : conserver les résultats, statuts, compteurs et détails d'audit.
+- Préserver les interfaces existantes, notamment le point d'entrée `controls.py`, les appels KSH, le packaging et la persistance Hive.
+- Conserver le fonctionnement du contrôle MAS/HUB récemment ajouté.
+- Privilégier des modifications progressives, cohérentes et testables.
+- Ne pas développer les cinq contrôles restants à cette étape.
+- Ne pas modifier les tables Hive ni lancer de traitements distants.
+- Ne pas effectuer de commit ou push automatiquement.
+
+### Méthode
+
+Commence par identifier brièvement les principaux problèmes structurels et propose un découpage raisonnable. **Ne considère pas les propositions des handovers comme une architecture imposée.**
+
+Ensuite, réalise le refactoring par lots cohérents, avec des tests de non-régression après chaque lot.
+
+À la fin, présente :
+1. Les choix d'architecture et leur justification.
+2. Les fichiers créés ou modifiés et leurs responsabilités.
+3. Les tests réellement exécutés et leurs résultats.
+4. Les éventuels risques ou points restant à valider.
+5. Une proposition de découpage en commits.
+
+Évite de produire une nouvelle analyse exhaustive. L'objectif est d'obtenir un moteur plus clair, stable et facilement extensible, **sans changement de comportement métier**.
