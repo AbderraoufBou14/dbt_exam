@@ -1,37 +1,18 @@
-## Refactoring du moteur de contrôles Raw Vault
+Avant de poursuivre le développement des contrôles manquants, nous souhaitons refactorer le moteur d'audit Raw Vault pour améliorer sa modularité, sa lisibilité et sa maintenabilité.
 
-Nous avons terminé une première implémentation du contrôle `MAS_HK_ABSENT_HUB`. Avant de développer les cinq contrôles fonctionnels restants, nous souhaitons améliorer la structure du moteur existant.
+Tu disposes du code complet et du contexte technique. Analyse la structure actuelle et **propose un plan de refactoring adapté à l'existant**, en privilégiant la simplicité, la séparation des responsabilités et la facilité d'ajout de nouveaux contrôles.
 
-Tu disposes du code complet et des documents de contexte. **Je te laisse analyser et choisir l'approche de refactoring la plus pertinente**, en fonction des responsabilités réelles, des dépendances et des conventions du projet.
+Je te laisse identifier les problèmes structurels, choisir l'architecture cible et définir les étapes de refactoring les plus pertinentes.
 
-### Objectifs
+Présente un plan synthétique comprenant :
+- Les problèmes identifiés dans l'architecture actuelle.
+- Le découpage proposé et les responsabilités des modules.
+- Les étapes d'implémentation et leur ordre.
+- Les impacts potentiels sur les interfaces, le packaging et les performances.
+- La stratégie de tests et de non-régression.
 
-- Améliorer la modularité, la lisibilité et la maintenabilité.
-- Clarifier la séparation des responsabilités et réduire les duplications.
-- Faciliter l'ajout des futurs contrôles sans complexifier davantage le moteur.
-- Préserver les performances et éviter la sur-ingénierie.
+**Contraintes :** préserver le comportement fonctionnel, les contrôles existants, la compatibilité KSH/Spark et la persistance des audits. Éviter toute sur-ingénierie.
 
-### Contraintes
+**Pour le moment, aucune modification de code, aucun test ni commit.** Nous allons d'abord examiner ton plan et l'ajuster si nécessaire.
 
-- Refactoring à comportement fonctionnel constant : conserver les résultats, statuts, compteurs et détails d'audit.
-- Préserver les interfaces existantes, notamment le point d'entrée `controls.py`, les appels KSH, le packaging et la persistance Hive.
-- Conserver le fonctionnement du contrôle MAS/HUB récemment ajouté.
-- Privilégier des modifications progressives, cohérentes et testables.
-- Ne pas développer les cinq contrôles restants à cette étape.
-- Ne pas modifier les tables Hive ni lancer de traitements distants.
-- Ne pas effectuer de commit ou push automatiquement.
-
-### Méthode
-
-Commence par identifier brièvement les principaux problèmes structurels et propose un découpage raisonnable. **Ne considère pas les propositions des handovers comme une architecture imposée.**
-
-Ensuite, réalise le refactoring par lots cohérents, avec des tests de non-régression après chaque lot.
-
-À la fin, présente :
-1. Les choix d'architecture et leur justification.
-2. Les fichiers créés ou modifiés et leurs responsabilités.
-3. Les tests réellement exécutés et leurs résultats.
-4. Les éventuels risques ou points restant à valider.
-5. Une proposition de découpage en commits.
-
-Évite de produire une nouvelle analyse exhaustive. L'objectif est d'obtenir un moteur plus clair, stable et facilement extensible, **sans changement de comportement métier**.
+Réponse concise, basée sur le code réel, sans nouvelle exploration exhaustive.
