@@ -1,13 +1,15 @@
-Avant de poursuivre, je souhaite une vérification ciblée de deux points dans le contrôle `SOURCE_BK_ABSENT_HUB` :
+Nous poursuivons la mise en conformité des contrôles source avec la spécification fonctionnelle Excel.
 
-1. **Déduplication des références** : dans `config_loader.py`, vérifie si `reference_key` peut fusionner à tort deux références ayant les mêmes tables et mappings, mais des valeurs différentes de `filtre` ou `bk_default_value`. Vérifie si ce cas existe dans les configurations réelles.
+Commence par le contrôle SOURCE ↔ SAT uniquement.
 
-2. **Concaténation des BK composites** : dans `control_logic.py`, vérifie si l'utilisation de `SOURCE_KEY_DELIMITER` avec `F.concat_ws()` peut provoquer des collisions entre deux combinaisons de BK différentes. Examine notamment le séparateur, les NULL et les valeurs métier possibles.
+Exigence Excel : comparer les couples (BK HUB, HDIFF SAT) avec (BK source, HDIFF source recalculé à partir du payload), afin d'identifier les enregistrements présents dans la source mais absents du satellite.
 
-Pour chaque point, indique :
-- Le comportement exact du code actuel.
-- Si le risque est réel, théorique ou déjà couvert.
-- Les configurations concernées, le cas échéant.
-- Si une correction est nécessaire, avec une justification courte.
+Appuie-toi sur le code actuel, les JSON et les patterns de chargement pour déterminer les bons mappings, transformations et calculs HDIFF.
 
-**Analyse uniquement ces deux points. Aucune modification de code, aucun nouveau test, aucune exécution Spark et aucun commit. Fournis simplement un bilan synthétique et factuel.**
+Adapte le contrôle existant en réutilisant au maximum le code déjà développé. Respecte les conventions d'audit, les interfaces KSH/Spark et l'architecture modulaire.
+
+Ajoute les tests ciblés OK/KO/ERROR et vérifie la non-régression des contrôles existants.
+
+Ne modifie pas les quatre autres contrôles source pour l'instant. Pas de refactoring supplémentaire, pas de traitement distant, pas de commit ni de push.
+
+À la fin, fournis un bilan court : logique implémentée, fichiers modifiés, tests réussis et éventuelles limites fonctionnelles.
