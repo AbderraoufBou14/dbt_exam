@@ -1,19 +1,18 @@
-Je souhaite vérifier la conformité de `SOURCE_BK_ABSENT_HUB` concernant les mappings `cles_src` et les HUB multi-sources.
+Ton analyse montre des écarts fonctionnels dans `SOURCE_BK_ABSENT_HUB`, notamment sur les clés composites, la normalisation, les valeurs par défaut et les filtres.
 
-Examine le code actuel de `config_loader.py` et `control_logic.py`, puis confronte-le à ces configurations réelles :
+Je souhaite maintenant corriger ce contrôle en priorité.
 
-- `instrument` : plusieurs sources avec `id` ou `codevaleur` → `id_instrument`.
-- `portefeuille` : sources DF5/SI3 avec noms de BK différents.
-- `position_mens`, `position_quot`, `position_quot_caceis` : même HUB `position`, BK composite de 7 champs et mappings différents.
-- `flux_financiers` : plusieurs répertoires sources avec `xx_date_param` → `dtvalorisation`.
+Appuie-toi sur le code actuel, les configurations réelles et les patterns de chargement pour choisir l'implémentation adaptée.
 
-Vérifie précisément :
-1. La gestion des mappings `src_bk_name` → `target_bk_name`, y compris les BK composites et leur ordre.
-2. La normalisation des valeurs, `bk_default_value` et les filtres.
-3. Le traitement de plusieurs sources d'un même HUB, y compris lorsqu'elles sont déclarées dans différents répertoires.
-4. La conformité avec la spécification Excel demandant l'union des BK des sources d'un HUB.
-5. Le comportement des champs particuliers comme `xx_date_param`.
+Objectifs :
+- Comparer les BK composites comme des clés complètes, et non champ par champ.
+- Respecter les mappings, transformations, valeurs par défaut et filtres réellement utilisés lors du chargement.
+- Préserver le fonctionnement des BK simples et des sources multiples.
+- Ajouter des tests ciblés couvrant notamment les faux OK des clés composites, les NULL, les filtres et la non-régression.
+- Ne pas modifier la granularité des résultats par source ni le périmètre inter-répertoires à cette étape.
 
-Pour chaque point, indique : déjà implémenté, partiel ou absent, avec la fonction concernée et la conséquence fonctionnelle.
+Évite tout refactoring supplémentaire et toute modification des autres contrôles sans nécessité démontrée.
 
-Pas de modification de code ni d'exécution distante. Réponse synthétique, sans exploration générale du dépôt.
+Implémente les corrections, lance les tests locaux et fournis un bilan synthétique des changements et des limites restantes.
+
+Pas de commit, de push ni d'exécution distante.
