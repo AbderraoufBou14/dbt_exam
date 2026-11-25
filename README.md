@@ -1,28 +1,65 @@
-Nous poursuivons l'analyse du contrôle `SOURCE_BK_ABSENT_HUB`, particulièrement la cohérence du champ `uniqueness_columns` dans les tables d'audit.
+Nous reprenons le chantier `SOURCE_BK_ABSENT_HUB`, après une revue fonctionnelle avec l'équipe.
 
-Sur l'objet `instrument`, les sources utilisent `id` et `codevaleur` (`src_bk_name`), tandis que le HUB utilise `bk_id_instrument` (`target_bk_name`). Actuellement, `uniqueness_columns` présente les colonnes cibles, ce qui soulève une question sur sa signification et sa lisibilité.
+**Décisions déjà validées :**
+- Un contrôle par source, sans UNION.
+- Anti-jointure Source → HUB, sens inchangé.
+- Calcul des BK composites conservé.
+- Nous souhaitons que `AUDIT_RESULT.uniqueness_columns` contienne les colonnes BK source (`source_key_columns`) et non les colonnes BK du HUB (`hub_bk_columns`).
 
-**Décision déjà prise :** nous conservons un résultat de contrôle par table source, sans faire d'UNION des sources, afin de faciliter la traçabilité des anomalies. Ce point n'est plus à arbitrer.
+Exemple `instrument` :
+- Source `lac_pvr_instrument_delta` : `["id"]`
+- Source `lac_pvo_inventaires_quot_dern_vers_instrument` : `["codevaleur"]`
+- Actuellement, les deux résultats présentent `["bk_id_instrument"]`.
 
-### Analyse demandée
+**Travail demandé : analyse et vérification uniquement, sans correction pour le moment.**
 
-Examine de manière ciblée le code actuel (`models.py`, `config_loader.py`, `control_logic.py`, `audit_store.py` et les composants concernés) pour déterminer :
+### 1. Analyse d'impact de `uniqueness_columns`
 
-1. Quelle est la signification réelle de `uniqueness_columns` dans le moteur, depuis sa construction jusqu'à son écriture dans `audit_result` et `audit_detail` ?
-2. Comment ce champ est-il renseigné pour `SOURCE_BK_ABSENT_HUB` et pour les autres familles de contrôles ? Sa signification est-elle uniforme ?
-3. Pour `instrument`, est-il techniquement et fonctionnellement cohérent d'afficher `target_bk_name` plutôt que `src_bk_name` ? Quels avantages et limites présente chaque option ?
-4. Comment distingue-t-on les résultats des différentes tables sources d'un même HUB dans `audit_result` et `audit_detail` ? La traçabilité est-elle suffisante actuellement ?
-5. L'ajustement de présentation que tu proposais dans `audit_result` résout-il réellement le problème ? A-t-il des conséquences sur les autres contrôles, le schéma Hive ou le dashboard ?
+En t'appuyant sur le code actuel, vérifie les conséquences d'un remplacement de :
 
-### Retour attendu
+`source_hub_reference.hub_bk_columns`
 
-Fournis un bilan factuel et synthétique comprenant :
-- Le fonctionnement actuel, avec les fonctions et champs concernés.
-- La distinction entre logique de calcul, identification des anomalies et métadonnées de restitution.
-- Les éventuelles incohérences démontrées.
-- Deux ou trois options de correction ou d'amélioration, avec leurs avantages, limites et impacts.
-- Ta recommandation argumentée, en privilégiant la solution la plus simple et la moins risquée.
+par :
 
-**Important : aucune modification de code, aucun test, aucune opération Hive, aucun commit.**
+`source_hub_reference.source_key_columns`
 
-Ne relance pas une analyse générale du dépôt. Nous voulons d'abord comprendre le comportement et choisir une solution avant toute implémentation.
+dans le contrôle `SOURCE_BK_ABSENT_HUB`.
+
+Examine uniquement les composants concernés :
+- `control_logic.py` et `config_loader.py`
+- Les écritures dans `AUDIT_TEST`, `AUDIT_RESULT` et `AUDIT_DETAIL`
+- Les tests unitaires existants
+- Le dashboard `analyzer.py`
+
+Vérifie notamment si ce changement affecterait les calculs, les comparaisons, les détails d'anomalies, les regroupements ou l'affichage.
+
+### 2. Vérification du comptage des BK normalisées
+
+Effectue un test unitaire PySpark ciblé pour vérifier ce cas limite :
+
+- `bk_default_value = "-1"`
+- Source contenant `NULL` et `"-1"`
+- HUB sans la BK correspondante
+
+Détermine si les deux valeurs produisent la même `composite_bk` et si le moteur compte une ou deux anomalies.
+
+Vérifie également la cohérence entre `AUDIT_RESULT.value` et les enregistrements générés dans `AUDIT_DETAIL`.
+
+Signale si le même problème peut concerner les BK composites.
+
+### 3. Retour attendu
+
+Fournis un rapport court et factuel avec :
+
+1. Les impacts réels du changement de `uniqueness_columns`.
+2. Les éventuelles incompatibilités identifiées.
+3. Le résultat du test PySpark : valeurs normalisées, nombre d'anomalies et détails.
+4. Ta recommandation pour une correction minimale et sécurisée.
+
+**Contraintes :**
+- Ne modifie pas le code métier ni les schémas Hive.
+- Tu peux exécuter un test unitaire isolé, sans conserver de fichier temporaire dans Git.
+- Ne traite pas encore l'ajout de `source_table_name` ni le partitionnement.
+- Aucun commit, push, packaging ou déploiement.
+
+Nous déciderons de l'implémentation après ton retour.
