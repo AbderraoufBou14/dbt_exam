@@ -1,87 +1,154 @@
-Nous préparons une évolution des tables d'audit du moteur Raw Vault. Avant de prendre les décisions techniques, je veux un état des lieux précis de l'implémentation actuelle.
+Nous commençons la première étape de l'évolution du moteur d'audit Raw Vault vers un nouveau modèle V2.
 
-Les évolutions déjà validées fonctionnellement sont :
-- Renommer `table_name` → `target_table_name`.
-- Renommer `physical_table_name` → `target_physical_table_name`.
-- Ajouter `source_table_name` pour identifier chaque source.
-- Introduire le partitionnement des tables d'audit.
+**Objectif : faire évoluer directement le modèle Python existant et la propagation des métadonnées, en préparant la structure définitive des futures tables d'audit V2.**
 
-Le moteur comporte 13 contrôles. Nous conservons un contrôle par source, sans UNION, et les calculs fonctionnels doivent rester inchangés.
+Cette étape ne comprend pas encore la création physique des tables Hive ni l'activation des écritures V2.
 
-Le périmètre de ton investigation est **le code DF6 et les tables de l'environnement DEV uniquement**. Ne fais aucune hypothèse sur REC, PREX ou PROD.
+## 1. Modèle cible
 
-### 1. Structure actuelle des tables d'audit
+Les quatre futures tables sont :
 
-Pour `AUDIT_TEST`, `AUDIT_RUN`, `AUDIT_RESULT` et `AUDIT_DETAIL`, identifie :
+- `AUDIT_TEST_V2`
+- `AUDIT_RUN_V2`
+- `AUDIT_RESULT_V2`
+- `AUDIT_DETAIL_V2`
 
-- Les colonnes et leurs types exacts.
-- Les clés logiques et relations entre les tables.
-- Les formats physiques, emplacements HDFS et bases Hive configurées.
-- Le partitionnement actuel, s'il existe.
-- La façon dont les tables sont créées et initialisées.
+Évolutions validées :
 
-Précise ce qui est confirmé par le code et ce qui a été réellement vérifié dans Hive DEV.
+**Renommage :**
+- `table_name` → `target_table_name`
+- `physical_table_name` → `target_physical_table_name`
 
-### 2. Fonctionnement des écritures Spark
+**Ajout :**
+- `source_table_name` : identification de la table source utilisée par le contrôle.
+- `run_date` : colonne technique de partitionnement quotidien, de type STRING au format `YYYY-MM-DD`.
 
-Retrouve les fonctions exactes qui :
-- Construisent les DataFrames d'audit.
-- Créent les tables Hive.
-- Insèrent les résultats.
-- Gèrent les runs, la déduplication des contrôles et les détails d'anomalies.
+Structure attendue :
 
-Explique les méthodes d'écriture utilisées (`insertInto`, `saveAsTable`, SQL...), la correspondance des colonnes par nom ou par position et le comportement en cas de différence entre le schéma Spark et celui de Hive.
+- `AUDIT_TEST_V2` : nouveaux noms de colonnes + `source_table_name`, sans partitionnement.
+- `AUDIT_RUN_V2` : schéma existant + `run_date`.
+- `AUDIT_RESULT_V2` : nouveaux noms + `source_table_name` + `run_date`.
+- `AUDIT_DETAIL_V2` : nouveaux noms + `source_table_name` + `run_date`.
 
-Indique si le moteur peut détecter ou corriger une incompatibilité de schéma.
+Conserver les autres colonnes et leurs types, notamment les horodatages existants.
 
-### 3. Origine des métadonnées des contrôles
+`run_date` doit être dérivée en UTC du `started_at` du run. Une même exécution doit avoir exactement la même `run_date` dans RUN, RESULT et DETAIL, y compris si elle se termine après minuit.
 
-Pour les 13 contrôles, identifie comment sont déterminés :
-- `table_name`
-- `physical_table_name`
-- `uniqueness_columns`
-- Le nom de la table source lorsqu'elle existe.
+Préparer les définitions de schéma définitives pour l'étape suivante, sans créer physiquement les tables.
 
-Vérifie si le nom source est déjà disponible dans les objets Python et comment il pourrait être propagé jusqu'aux résultats.
+## 2. Traçabilité de la source
 
-Le nom des tables sources dans les JSON correspond au nom physique Hive : inutile d'inventer une distinction supplémentaire.
+Faire évoluer les objets et fonctions existants pour transmettre correctement `source_table_name` jusqu'aux structures V2.
 
-Examine aussi la déduplication d'`AUDIT_TEST` et le rattachement d'`AUDIT_DETAIL` aux résultats, particulièrement pour les objets multisources comme `instrument`.
+Règles fonctionnelles :
 
-### 4. Dépendances des colonnes actuelles
+- Pour les contrôles Source → HUB/SAT/MAS/LINK, utiliser le nom de la table source provenant de la configuration réellement utilisée pour le contrôle.
+- Les noms de tables sources déclarés dans les JSON correspondent aux noms physiques Hive : aucune distinction supplémentaire n'est nécessaire.
+- Pour les contrôles internes au Raw Vault et les contrôles de comptage, `source_table_name` doit être NULL.
+- `target_table_name` et `target_physical_table_name` continuent de désigner l'objet Raw Vault concerné par le contrôle.
+- Conserver `SOURCE_BK_ABSENT_HUB.uniqueness_columns` avec les colonnes BK source, conformément à la dernière correction validée.
 
-Recherche dans le dépôt toutes les utilisations de `table_name`, `physical_table_name` et des structures des tables d'audit.
+La propagation doit couvrir tous les contrôles Source → Vault concernés, et pas uniquement l'objet `instrument`.
 
-Identifie les fichiers, fonctions, tests, requêtes SQL et composants d'analyse qui dépendent de ces noms.
+Ne pas modifier les calculs des BK composites, les HASHDIFF, les anti-jointures, les comptages ou les règles fonctionnelles des 13 contrôles.
 
-Distingue les véritables dépendances des simples occurrences de texte.
+## 3. Cohérence entre TEST, RESULT et DETAIL
 
-### 5. Possibilités de modification des tables Hive DEV
+Préparer la logique V2 pour garantir une traçabilité cohérente :
 
-À partir des DDL et du fonctionnement réel du moteur, explique :
+**AUDIT_TEST_V2**
+- Une définition de contrôle doit pouvoir être distinguée selon sa table source.
+- Adapter la déduplication existante pour ne pas fusionner deux sources différentes.
+- Gérer correctement les valeurs NULL de `source_table_name` pour les contrôles sans source.
+- Vérifier le cas où une même source possède plusieurs configurations distinctes pour la même cible.
 
-- Si les tables existantes peuvent être renommées et enrichies avec `ALTER TABLE`.
-- Si une recréation serait techniquement plus simple.
-- Ce qui arriverait si nous déployions le nouveau code sans faire évoluer les tables existantes.
-- Comment intégrer un partitionnement par date aux tables concernées.
-- Les implications du partitionnement sur les écritures Spark, les lectures, les requêtes et les performances.
-- Si l'ajout du partitionnement impose une recréation ou une migration particulière.
+**AUDIT_RESULT_V2**
+- Chaque résultat doit conserver la bonne table source.
+- Ne pas modifier les statuts, les valeurs calculées ni la granularité actuelle : un résultat par source.
 
-L'historique actuel en DEV n'a pas besoin d'être préservé. Les tables pourront être recréées si nous choisissons cette solution.
+**AUDIT_DETAIL_V2**
+- Chaque anomalie doit conserver la provenance source appropriée.
+- Vérifier que les détails restent rattachables sans ambiguïté au bon résultat, y compris pour plusieurs sources générant des KO.
+- Conserver le fonctionnement actuel de la génération des détails et ses limites existantes.
 
-### 6. Rapport attendu
+Réutiliser autant que possible les structures et fonctions déjà présentes. Ne pas introduire de mécanisme générique ou d'identifiant supplémentaire sans nécessité démontrée.
 
-Je veux un rapport technique détaillé, mais sans code inutile, contenant :
+## 4. Évolution du code et conservation des tables historiques
 
-1. Un tableau des quatre tables avec leurs schémas, formats, partitions et méthodes d'écriture.
-2. Le parcours des métadonnées depuis les JSON jusqu'à `AUDIT_TEST`, `AUDIT_RESULT` et `AUDIT_DETAIL`.
-3. Les fonctions et chemins de fichiers réellement concernés.
-4. Les dépendances et risques de compatibilité identifiés.
-5. Les possibilités techniques de renommage, d'ajout de colonne et de partitionnement.
-6. Les informations manquantes et les vérifications DEV nécessaires pour choisir une stratégie fiable.
+**Distinction importante :**
 
-**Important : ne prends pas encore de décision à notre place et n'implémente rien.**
+Nous voulons conserver les anciennes tables Hive `AUDIT_TEST`, `AUDIT_RUN`, `AUDIT_RESULT` et `AUDIT_DETAIL` uniquement pour l'historique et la comparaison.
 
-Ne modifie aucun fichier, aucune table Hive, aucune donnée et aucune configuration. Aucun commit, push, packaging ou déploiement.
+En revanche, **nous ne voulons pas conserver une version V1 du moteur Python**.
 
-Si tu ne peux pas interroger Hive DEV directement, indique-le clairement et fournis les requêtes SQL de lecture seule strictement nécessaires pour que je récupère les informations manquantes dans Hue.
+Consignes :
+
+- Faire évoluer directement les modules et fonctions Python existants vers le nouveau modèle V2.
+- Ne pas créer de moteur V2 parallèle, ni maintenir deux chemins d'écriture V1/V2.
+- Ne pas conserver d'anciens modèles uniquement pour la rétrocompatibilité des tables historiques.
+- Ne pas créer de nouveaux modules si les modules existants suffisent.
+- Préserver les interfaces KSH, le point d'entrée Spark et le fonctionnement des 13 contrôles métier.
+- Préparer le code pour que les écritures futures ciblent exclusivement les tables `AUDIT_*_V2`.
+- Ne pas modifier les tables Hive V1 existantes.
+
+**Limite de cette première étape :** ne pas encore créer les tables V2, activer les écritures Hive V2 ou lancer un traitement qui nécessite leur existence.
+
+Il est acceptable que cette étape ne constitue pas encore une version exécutable de bout en bout contre Hive : l'activation du stockage sera effectuée à l'étape 2.
+
+## 5. Préparation du partitionnement
+
+Préparer uniquement les champs et la propagation de `run_date`.
+
+Les futures règles sont :
+
+- `AUDIT_TEST_V2` : non partitionnée.
+- `AUDIT_RUN_V2` : partitionnée par `run_date`.
+- `AUDIT_RESULT_V2` : partitionnée par `run_date`.
+- `AUDIT_DETAIL_V2` : partitionnée par `run_date`.
+
+Ne pas encore modifier les écritures Spark pour activer le partitionnement.
+
+Attention : le moteur utilise actuellement `insertInto()`, qui dépend de l'ordre des colonnes. Préparer des schémas cohérents avec la future organisation des colonnes de partition, sans introduire d'écriture incompatible.
+
+Ne pas introduire d'optimisation Spark ou d'évolution des règles métier dans ce chantier.
+
+## 6. Tests et vérifications
+
+Adapter ou ajouter les tests unitaires pertinents pour couvrir :
+
+1. Les nouveaux noms de colonnes dans les structures V2.
+2. La transmission de `source_table_name` pour les deux sources de `instrument`.
+3. La propagation des métadonnées pour les autres familles Source → Vault.
+4. Les BK composites, notamment `position_mens`.
+5. La valeur NULL pour les contrôles sans source externe.
+6. La distinction de deux sources différentes dans la déduplication d'AUDIT_TEST.
+7. Le rattachement cohérent entre les structures TEST, RESULT et DETAIL.
+8. Le calcul de `run_date` en UTC et le cas d'un run passant minuit.
+9. La non-régression des 13 contrôles métier.
+
+Exécuter les suites locales de tests counting et analyzer.
+
+Si certains tests d'intégration Hive ne peuvent pas passer avant la création des tables V2, les identifier clairement : ne pas introduire de mécanisme V1 temporaire uniquement pour les faire réussir.
+
+## 7. Bilan attendu
+
+À la fin, présente un retour concis et factuel comprenant :
+
+- Les fichiers et fonctions modifiés.
+- Les nouveaux schémas des quatre tables V2.
+- Le chemin de propagation de `source_table_name`.
+- La logique retenue pour la déduplication d'AUDIT_TEST et le rattachement des détails.
+- Le calcul de `run_date`.
+- Les tests exécutés avec leurs résultats.
+- Les éventuelles limites et le travail précisément restant pour l'étape 2.
+
+**Contraintes finales :**
+
+- Aucun changement des règles métier des 13 contrôles.
+- Aucune modification des tables Hive existantes.
+- Aucune création physique de table V2 dans cette étape.
+- Aucun lancement KSH/YARN, packaging ou déploiement.
+- Aucun changement du dashboard pour le moment.
+- Ne pas traiter d'autres sujets que ceux de cette première étape.
+
+Le but est d'obtenir un modèle V2 cohérent et testé avant de passer à la création et aux écritures des tables Hive partitionnées.
