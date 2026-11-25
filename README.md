@@ -1,23 +1,13 @@
-Ton analyse d'impact est validée.
+Lors de la dernière vérification de `SOURCE_BK_ABSENT_HUB`, tu as indiqué que le script temporaire `/tmp` de test bout en bout échouait à cause d'une assertion trop stricte, et non du moteur.
 
-Implémente maintenant uniquement l'ajustement de `uniqueness_columns` pour le contrôle `SOURCE_BK_ABSENT_HUB`.
+Je veux vérifier précisément ce point avant de clôturer le chantier.
 
-Objectif : remplacer `hub_bk_columns` par `source_key_columns` dans la métadonnée `uniqueness_columns`, afin d'afficher les colonnes BK source.
+1. Retrouve le script temporaire concerné et identifie l'assertion qui échoue.
+2. Explique brièvement pourquoi elle échoue : erreur dans l'assertion, résultat inattendu ou problème du moteur.
+3. Corrige uniquement l'assertion si elle est effectivement incorrecte.
+4. Relance le test complet avec Spark en mémoire et `write_audit_tables`.
+5. Vérifie que les deux sources d'`instrument` produisent bien `["id"]` et `["codevaleur"]` dans `AUDIT_RESULT`, avec des valeurs et détails cohérents.
 
-Exemples attendus :
-- Instrument, source PVR : `["id"]`
-- Instrument, source inventaire : `["codevaleur"]`
-- Position avec BK composite : liste complète des colonnes BK source, dans l'ordre des mappings.
+**Retour attendu :** assertion initiale, cause exacte, correction effectuée et résultat final PASS/FAIL.
 
-Consignes :
-- Ne modifier ni les calculs des BK composites, ni l'anti-jointure, ni les regroupements, ni le comptage des anomalies.
-- Adapter les assertions des tests existants et ajouter un test ciblé si nécessaire.
-- Exécuter les suites de tests de non-régression (counting et analyzer).
-- Vérifier que `AUDIT_RESULT` contient la nouvelle métadonnée et que `AUDIT_DETAIL` conserve son comportement.
-- Ne pas modifier le schéma Hive.
-- Signaler clairement la limitation actuelle d'`AUDIT_TEST` pour les HUB multisources, sans chercher à la corriger dans ce lot.
-- Ne pas traiter `source_table_name`, le partitionnement ni le cas limite de comptage NULL/default dans cette modification.
-
-Fournis un bilan concis des fichiers modifiés et des tests exécutés.
-
-Aucun commit, push ni déploiement.
+Ne modifie aucun fichier métier ni test versionné. Aucun commit, push ou déploiement. Si le script temporaire n'existe plus, indique-le plutôt que de prétendre l'avoir relancé.
