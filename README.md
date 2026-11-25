@@ -1,33 +1,28 @@
-Nous allons effectuer la validation d'intégration DEV du moteur de contrôles Raw Vault sur l'objet `instrument`, après exécution du KSH.
+Nous poursuivons l'analyse du contrôle `SOURCE_BK_ABSENT_HUB`, particulièrement la cohérence du champ `uniqueness_columns` dans les tables d'audit.
 
-Prépare un **script SQL ad hoc unique**, directement copiable et exécutable dans Hue/Impala, pour vérifier indépendamment les résultats du moteur.
+Sur l'objet `instrument`, les sources utilisent `id` et `codevaleur` (`src_bk_name`), tandis que le HUB utilise `bk_id_instrument` (`target_bk_name`). Actuellement, `uniqueness_columns` présente les colonnes cibles, ce qui soulève une question sur sa signification et sa lisibilité.
 
-Appuie-toi sur le code actuel, les JSON de `parm/raw/instrument`, les schémas physiques et les règles des patterns de chargement. Ne suppose aucun nom de colonne ni aucune formule de calcul non vérifiée.
+**Décision déjà prise :** nous conservons un résultat de contrôle par table source, sans faire d'UNION des sources, afin de faciliter la traçabilité des anomalies. Ce point n'est plus à arbitrer.
 
-Le script doit couvrir uniquement les vérifications pertinentes pour cet objet :
+### Analyse demandée
 
-1. **Exécution de l'audit** : retrouver le dernier `run_id` de `instrument`, vérifier les contrôles effectivement exécutés, les statuts OK/KO/ERROR et les valeurs enregistrées dans `AUDIT_RESULT`.
-2. **Détails des anomalies** : consulter `AUDIT_DETAIL` pour les contrôles en KO et vérifier la cohérence avec les résultats agrégés.
-3. **Contrôles de comptage** : recalculer les comptages et doublons pertinents directement sur les tables HUB/SAT/MAS.
-4. **Intégrité SAT → HUB et MAS → HUB** : recalculer indépendamment les clés orphelines dans les tables réelles et comparer les volumes avec l'audit.
-5. **SOURCE → HUB** : vérifier les BK provenant des différentes tables sources configurées, en respectant les mappings `cles_src`, les clés composites, les filtres et les valeurs par défaut.
-6. **SOURCE → SAT et SOURCE → MAS** : vérifier la présence des enregistrements par identité et contenu, avec les BK/HK, discriminants et HDIFF reconstruits selon les règles effectives des loaders.
+Examine de manière ciblée le code actuel (`models.py`, `config_loader.py`, `control_logic.py`, `audit_store.py` et les composants concernés) pour déterminer :
 
-N'inclus les contrôles LINK ou LINK/SAT/MAS que si l'objet `instrument` possède effectivement les configurations et relations nécessaires dans son périmètre d'exécution.
+1. Quelle est la signification réelle de `uniqueness_columns` dans le moteur, depuis sa construction jusqu'à son écriture dans `audit_result` et `audit_detail` ?
+2. Comment ce champ est-il renseigné pour `SOURCE_BK_ABSENT_HUB` et pour les autres familles de contrôles ? Sa signification est-elle uniforme ?
+3. Pour `instrument`, est-il techniquement et fonctionnellement cohérent d'afficher `target_bk_name` plutôt que `src_bk_name` ? Quels avantages et limites présente chaque option ?
+4. Comment distingue-t-on les résultats des différentes tables sources d'un même HUB dans `audit_result` et `audit_detail` ? La traçabilité est-elle suffisante actuellement ?
+5. L'ajustement de présentation que tu proposais dans `audit_result` résout-il réellement le problème ? A-t-il des conséquences sur les autres contrôles, le schéma Hive ou le dashboard ?
 
-### Consignes pour le script
+### Retour attendu
 
-- Produis **un seul bloc SQL**, organisé dans l'ordre logique de validation.
-- Utilise des commentaires courts et simples avant chaque requête : objectif du contrôle et résultat attendu.
-- Évite les requêtes redondantes et celles qui n'apportent pas de vérification indépendante.
-- Privilégie les comparaisons de volumes et les anti-jointures réellement utiles ; ajoute une consultation détaillée seulement si nécessaire pour diagnostiquer les écarts.
-- Les requêtes doivent être en lecture seule (`SELECT`, `WITH`, `UNION ALL`).
-- Utilise les noms exacts des bases, tables et colonnes DEV.
-- Pour les contrôles de contenu, respecte précisément les règles de calcul utilisées par les loaders ; ne remplace pas une comparaison métier par une simple comparaison de HK.
-- Distingue clairement un KO métier attendu d'une erreur technique.
-- Si une vérification n'est pas fiable ou pas réalisable en SQL Impala, ne l'invente pas : indique brièvement la limite en commentaire et poursuis les autres vérifications.
-- Ne crée aucune table ni vue et ne modifie aucune donnée.
+Fournis un bilan factuel et synthétique comprenant :
+- Le fonctionnement actuel, avec les fonctions et champs concernés.
+- La distinction entre logique de calcul, identification des anomalies et métadonnées de restitution.
+- Les éventuelles incohérences démontrées.
+- Deux ou trois options de correction ou d'amélioration, avec leurs avantages, limites et impacts.
+- Ta recommandation argumentée, en privilégiant la solution la plus simple et la moins risquée.
 
-**Important :** je veux uniquement le SQL final dans un seul bloc copiable, sans rapport d'analyse, sans explications longues et sans multiplication de requêtes inutiles.
+**Important : aucune modification de code, aucun test, aucune opération Hive, aucun commit.**
 
-Ne modifie aucun fichier du projet, ne lance aucun traitement et n'effectue aucun commit ou push.
+Ne relance pas une analyse générale du dépôt. Nous voulons d'abord comprendre le comportement et choisir une solution avant toute implémentation.
