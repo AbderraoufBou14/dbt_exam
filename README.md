@@ -1,113 +1,129 @@
-Nous passons à l'étape 2 du chantier V2 : **création physique des tables d'audit partitionnées et activation des écritures Spark**.
+Nous poursuivons l'analyse des divergences HDIFF sur les quatre contrôles :
 
-L'étape 1 est déjà implémentée : schémas V2, renommages, propagation de `source_table_name`, calcul de `run_date` et adaptation des modèles Python.
+- SOURCE_HK_ABSENT_SAT
+- SOURCE_HK_ABSENT_MAS
+- SOURCE_HK_ABSENT_LINK_SAT
+- SOURCE_HK_ABSENT_LINK_MAS
 
-Travaille sur cette base existante. Ne refais pas l'étape 1 et ne crée aucune seconde implémentation du moteur.
+Ton précédent rapport a présenté six solutions (A à F). Je veux maintenant une **investigation complémentaire, approfondie mais ciblée**, pour déterminer quelle solution est réellement applicable au moteur DF6 existant.
 
-## 1. Création des quatre tables V2
+Notre objectif est de permettre aux utilisateurs métier d'identifier les colonnes du payload responsables d'un HDIFF divergent, directement ou facilement depuis les résultats d'audit.
 
-Adapter `ensure_audit_tables()` dans `audit_store.py` pour créer automatiquement, si elles n'existent pas, les tables suivantes dans la base d'audit configurée à l'exécution :
+Le problème des discriminants NULL est déjà corrigé en V2. Ne reviens pas sur ce sujet. Le dashboard est hors périmètre.
 
-- `AUDIT_TEST_V2` : non partitionnée.
-- `AUDIT_RUN_V2` : partitionnée par `run_date`.
-- `AUDIT_RESULT_V2` : partitionnée par `run_date`.
-- `AUDIT_DETAIL_V2` : partitionnée par `run_date`.
+**Aucune modification de code ou de tables : analyse uniquement.**
 
-Conserver le format PARQUET et les conventions actuelles de création des tables.
+### 1. Déterminer comment identifier la bonne ligne Vault
 
-Utiliser les schémas V2 définitifs préparés à l'étape 1, sans introduire de nouvelles colonnes inutiles.
+C'est la question prioritaire.
 
-Dans les tables partitionnées :
-- `run_date` doit être de type STRING, au format `YYYY-MM-DD`.
-- La colonne doit être déclarée dans `PARTITIONED BY`, et non en double dans la liste des colonnes ordinaires.
-- Elle doit figurer à la bonne position dans les DataFrames destinés à l'écriture Spark.
+Examine les implémentations réelles des loaders SAT/MAS et leurs configurations JSON, ainsi que les quatre contrôles d'audit.
 
-**Les quatre tables historiques sans suffixe `_V2` doivent rester totalement intactes.**
+Nous savons qu'une même HK peut correspondre à plusieurs versions historisées.
 
-Aucun DROP, ALTER, INSERT ou autre opération sur les anciennes tables.
+Je veux comprendre précisément :
 
-## 2. Écritures Spark partitionnées
+- Comment le loader détermine qu'un nouvel état descriptif doit être inséré.
+- Quels rôles jouent `ldts`, `dt_fonc`, `dt_deb_val` et les éventuelles autres dates présentes dans les objets concernés.
+- Si le loader compare avec le dernier état, un état à date fonctionnelle donnée, ou selon une autre règle.
+- Pour les MAS, si le pattern utilisé fonctionne par occurrence ou par état d'ensemble, notamment en version MAS v2.
+- Comment sélectionner sans ambiguïté la ligne Vault comparable à une ligne source dont le couple HK/HDIFF est absent.
+- Que faire lorsqu'il existe zéro, une ou plusieurs versions candidates, et comment éviter une sélection arbitraire.
 
-Adapter les écritures existantes pour alimenter exclusivement les tables V2.
+Étudie au moins un SAT et un MAS réellement configurés dans DF6, ainsi que la particularité des satellites rattachés aux LINK.
 
-Le moteur utilise actuellement `df.write.mode("append").insertInto(...)`, avec une correspondance des colonnes par position.
+**Question centrale : sommes-nous techniquement capables d'identifier une version Vault pertinente pour comparer les colonnes du payload, ou seulement de constater l'absence du couple HK/HDIFF dans l'historique ?**
 
-Vérifie et sécurise :
-- L'ordre exact des colonnes entre les DataFrames Spark et les tables Hive.
-- La présence et le type de `run_date`.
-- La création et l'alimentation correctes des partitions quotidiennes.
-- Le comportement des partitions dynamiques dans notre environnement Spark/Hive.
-- La cohérence des écritures RUN, RESULT et DETAIL.
+Si le code des loaders est dans un package externe, inspecte la version accessible ; sinon, distingue clairement ce qui est démontré de ce qui reste inconnu.
 
-Attention : ne pas ajouter mécaniquement `.partitionBy("run_date")` à `insertInto()`. Utiliser la méthode compatible avec les tables Hive déjà déclarées partitionnées.
+### 2. Vérifier la fidélité des calculs de HDIFF
 
-Conserver `run_date` calculée depuis `started_at` en UTC, identique dans les trois tables d'exécution, même lorsqu'un traitement franchit minuit.
+Compare précisément le calcul de `source_hdiff_expression()` dans notre moteur d'audit avec celui du pattern de chargement réellement utilisé.
 
-Pour `AUDIT_TEST_V2`, conserver une écriture non partitionnée et la déduplication multisources préparée à l'étape 1.
+Analyse :
+- L'ordre et la sélection des champs `payload` du JSON.
+- Les transformations et casts selon `col_type`.
+- Les valeurs NULL, chaînes vides, dates et timestamps.
+- Les décimaux et la représentation des nombres.
+- Les filtres, expressions ou transformations appliqués avant le calcul.
+- Les différences potentielles entre une valeur source brute, une valeur transformée et une valeur stockée dans le Vault.
 
-## 3. Sécurité et cohérence des schémas
+Identifie les divergences réelles possibles entre le loader et l'audit, avec les fichiers/fonctions concernés.
 
-Avant les écritures, vérifier que les schémas V2 existants, s'ils sont déjà présents dans Hive, sont compatibles avec les schémas attendus.
+Je veux surtout savoir **si un HDIFF absent peut être provoqué par notre propre reconstruction du hash alors que les données métier ont été correctement chargées**.
 
-Éviter particulièrement les écritures silencieusement décalées dues à `insertInto()`.
+Propose les tests ciblés permettant de vérifier cette cohérence, sans les implémenter pour le moment.
 
-En cas d'incompatibilité, remonter une erreur explicite plutôt que modifier ou supprimer automatiquement les tables.
+### 3. Examiner la faisabilité d'un diagnostic automatique
 
-Les anciennes tables V1 ne doivent jamais être utilisées comme solution de repli.
+À partir du code actuel de `control_logic.py`, `models.py` et `audit_store.py`, explique comment nous pourrions :
 
-Ne pas coder en dur la base DEV : conserver la base d'audit fournie par le KSH et les paramètres existants.
+1. Conserver le calcul principal et les statuts actuels.
+2. Récupérer uniquement les anomalies pertinentes après l'anti-jointure.
+3. Retrouver les lignes sources originales et les versions Vault comparables.
+4. Comparer les colonnes du payload selon les mêmes règles que le loader.
+5. Extraire uniquement les noms des colonnes divergentes.
+6. Éviter les diagnostics erronés lorsqu'aucune version comparable n'est identifiable.
 
-## 4. Préservation du fonctionnement métier
+Vérifie particulièrement ce qui reste disponible après les `groupBy`, les transformations et la limite actuelle de 1 000 détails.
 
-Ne modifier aucune règle des 13 contrôles.
+Précise les risques de jointures multiples, les besoins en colonnes intermédiaires et les conséquences Spark sur la volumétrie.
 
-Conserver :
-- Les statuts OK/KO/ERROR.
-- Les comptages et les anti-jointures actuels.
-- Les calculs BK/HK/HDIFF.
-- La logique un contrôle par source, sans UNION.
-- Les valeurs de `uniqueness_columns` déjà validées.
-- La propagation de `source_table_name` dans TEST, RESULT et DETAIL.
-- Les limites existantes de génération des détails.
-- Les interfaces `engine.py`, `controls.py` et KSH.
+### 4. Déterminer le meilleur format de restitution
 
-Aucune duplication du moteur, aucune optimisation Spark ou refactorisation hors sujet.
+Compare les solutions suivantes dans notre architecture V2 réelle :
 
-## 5. Tests nécessaires
+**A.** Enrichir le JSON `AUDIT_DETAIL_V2.key_values` avec un diagnostic.
 
-Effectuer les tests locaux nécessaires pour vérifier :
+**B.** Ajouter une colonne dédiée, par exemple `mismatch_columns`, à `AUDIT_DETAIL_V2`.
 
-1. Les DDL des quatre tables V2, dont les trois `PARTITIONED BY (run_date STRING)`.
-2. La conformité exacte des schémas et de l'ordre des colonnes.
-3. Les écritures dans des tables V2 partitionnées avec Spark local, si l'environnement de test le permet.
-4. L'alimentation des partitions par date.
-5. Deux exécutions sur deux jours différents produisant deux partitions distinctes.
-6. Une exécution franchissant minuit, avec la même `run_date` dans RUN/RESULT/DETAIL.
-7. La persistance correcte de `source_table_name`, y compris NULL pour les contrôles internes.
-8. La déduplication d'`AUDIT_TEST_V2` sur plusieurs exécutions et plusieurs sources.
-9. L'absence de modification des tables historiques.
+**C.** Créer une table complémentaire de diagnostic contenant le contexte du contrôle, les clés de rapprochement, le type d'anomalie et les colonnes divergentes.
 
-Exécuter ensuite les suites de non-régression counting et analyzer.
+**D.** Produire un diagnostic à la demande plutôt que lors de chaque run.
 
-Si un test local ne peut pas reproduire fidèlement Hive DEV, indiquer clairement cette limite.
+**E.** Séparer les types d'anomalies en plusieurs `test_id`, comme dans ton rapport précédent, ou conserver les `test_id` existants avec une qualification de l'anomalie.
 
-## 6. Limites de cette étape
+Pour chaque solution, précise :
+- Sa faisabilité réelle avec le code existant.
+- Le coût Spark prévisible et les données supplémentaires à relire.
+- L'impact sur les tables V2, les schémas et les écritures.
+- La facilité d'exploitation directement dans Hue.
+- Le comportement en cas de plusieurs versions historisées.
+- Les risques de mauvaise interprétation métier.
+- La complexité de développement et de maintenance.
 
-- Ne pas modifier le dashboard : il sera traité à l'étape 3.
-- Ne pas modifier les anciennes tables Hive.
-- Ne pas lancer de KSH/YARN ni de traitement réel sur le cluster.
-- Ne pas procéder à une création manuelle des tables dans Hive DEV : leur création doit être prévue par le moteur au lancement du prochain traitement.
-- Ne pas créer de mécanisme de migration des données historiques.
+Nous voulons éviter une V3 ou de nouvelles tables si elles n'apportent pas une valeur suffisante, mais nous sommes ouverts à une table complémentaire si c'est réellement la solution la plus propre.
 
-## 7. Bilan attendu
+### 5. Présentation métier souhaitée
 
-À la fin, fournis un bilan factuel et concis :
+Analyse la possibilité de produire un résultat comme :
 
-- Fichiers et fonctions modifiés.
-- DDL définitifs des quatre tables V2.
-- Méthode retenue pour les écritures partitionnées.
-- Vérifications de compatibilité des schémas.
-- Tests exécutés et résultats.
-- Limites éventuelles à vérifier lors de la première exécution réelle DEV.
+- Source : table source réellement contrôlée.
+- Cible : satellite ou MAS concerné.
+- HK et discriminants éventuels.
+- HDIFF attendu.
+- Type d'anomalie : identité absente / état descriptif non retrouvé / comparaison impossible.
+- Colonnes divergentes : liste des noms de colonnes, lorsque la comparaison est fiable.
 
-**Objectif final :** disposer d'un moteur prêt à créer et alimenter automatiquement les quatre tables `AUDIT_*_V2` lors de ma prochaine exécution KSH, sans aucune intervention sur les anciennes tables d'audit.
+En première intention, nous privilégions **les noms des colonnes divergentes**, sans stocker systématiquement les valeurs métier en clair.
+
+Détermine si les valeurs source et Vault peuvent être conservées comme diagnostic optionnel, sans introduire inutilement de données sensibles dans les audits.
+
+Montre deux ou trois exemples illustratifs de résultats attendus, notamment un KO sans identité Vault et un KO avec HDIFF divergent.
+
+### 6. Recommandation finale attendue
+
+Je veux un arbitrage technique argumenté répondant à quatre questions :
+
+1. Quel mécanisme serait le plus fiable fonctionnellement pour nos SAT, MAS, LINK-SAT et LINK-MAS ?
+2. Quel mécanisme serait le plus simple à maintenir et le moins coûteux en Spark ?
+3. Comment intégrer cette fonctionnalité sans remettre en cause les 13 contrôles et les tables d'audit V2 déjà opérationnelles ?
+4. Quelles vérifications sont indispensables avant toute implémentation ?
+
+Présente un tableau comparatif, une recommandation priorisée et un plan de mise en œuvre en petites étapes testables.
+
+Appuie les conclusions sur des fonctions, schémas et JSON réels. Distingue clairement les faits confirmés, les risques théoriques et les informations non vérifiables.
+
+**Ne réexplique pas longuement la logique générale des HK/HDIFF déjà connue. Concentre-toi sur les problèmes concrets de correspondance des versions, de fidélité du hash, de disponibilité du payload et de coût du diagnostic.**
+
+Aucun changement des règles métier, aucune modification du moteur, aucune exécution réelle, aucune opération Hive, aucun déploiement.
