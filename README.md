@@ -1,129 +1,68 @@
-Nous poursuivons l'analyse des divergences HDIFF sur les quatre contrôles :
+Nous poursuivons l'étude du moteur d'audit Raw Vault DF6 avant de décider du mécanisme de diagnostic des divergences HDIFF.
 
-- SOURCE_HK_ABSENT_SAT
-- SOURCE_HK_ABSENT_MAS
-- SOURCE_HK_ABSENT_LINK_SAT
-- SOURCE_HK_ABSENT_LINK_MAS
+Le contexte fonctionnel est important : DF6 fonctionne avec des alimentations INIT et récurrentes, des sources `_delta` / `_delta_histo`, des traitements quotidiens, intraday et mensuels, orchestrés via Control-M.
 
-Ton précédent rapport a présenté six solutions (A à F). Je veux maintenant une **investigation complémentaire, approfondie mais ciblée**, pour déterminer quelle solution est réellement applicable au moteur DF6 existant.
+Notre audit compte actuellement 13 contrôles. Les tables AUDIT_*_V2 sont opérationnelles. Le problème des discriminants est corrigé.
 
-Notre objectif est de permettre aux utilisateurs métier d'identifier les colonnes du payload responsables d'un HDIFF divergent, directement ou facilement depuis les résultats d'audit.
+Nous avons déjà analysé les règles de hash, les versions SAT/MAS et la faisabilité de comparer les payloads. **Ne refais pas cette analyse générale.**
 
-Le problème des discriminants NULL est déjà corrigé en V2. Ne reviens pas sur ce sujet. Le dashboard est hors périmètre.
+Je veux maintenant comprendre comment les cycles de chargement influencent la pertinence des contrôles Source → SAT/MAS/LINK-SAT/LINK-MAS.
 
-**Aucune modification de code ou de tables : analyse uniquement.**
+Analyse le code DF6, les configurations JSON, les loaders accessibles et les KSH.
 
-### 1. Déterminer comment identifier la bonne ligne Vault
+### 1. Périmètre réellement contrôlé
 
-C'est la question prioritaire.
+- Comment les sources `_delta` et `_delta_histo` sont-elles utilisées par les loaders et l'audit ?
+- Quel rôle jouent INIT, récurrent, les éventuels suffixes `_histo` et les filtres JSON ?
+- La date `-d` du KSH influence-t-elle réellement le périmètre de données contrôlé ou sert-elle uniquement au contexte d'exécution ?
+- L'audit compare-t-il toute la source disponible, un snapshot, une période ou les données d'un chargement précis ?
+- Dans quelles conditions source et Vault peuvent-ils représenter des périmètres temporels différents ?
 
-Examine les implémentations réelles des loaders SAT/MAS et leurs configurations JSON, ainsi que les quatre contrôles d'audit.
+### 2. Scénarios fonctionnels concrets
 
-Nous savons qu'une même HK peut correspondre à plusieurs versions historisées.
+Étudie trois objets réels et représentatifs dans les configurations accessibles, idéalement :
+- `instrument`, avec ses différentes sources ;
+- un objet `position`, potentiellement concerné par plusieurs périodicités ;
+- un objet avec MAS ou LINK-MAS et historisation significative.
 
-Je veux comprendre précisément :
+Pour chacun, explique ce que vérifierait notre audit après un INIT, un chargement récurrent ou une reprise, selon ce que permet réellement la configuration.
 
-- Comment le loader détermine qu'un nouvel état descriptif doit être inséré.
-- Quels rôles jouent `ldts`, `dt_fonc`, `dt_deb_val` et les éventuelles autres dates présentes dans les objets concernés.
-- Si le loader compare avec le dernier état, un état à date fonctionnelle donnée, ou selon une autre règle.
-- Pour les MAS, si le pattern utilisé fonctionne par occurrence ou par état d'ensemble, notamment en version MAS v2.
-- Comment sélectionner sans ambiguïté la ligne Vault comparable à une ligne source dont le couple HK/HDIFF est absent.
-- Que faire lorsqu'il existe zéro, une ou plusieurs versions candidates, et comment éviter une sélection arbitraire.
+Considère aussi les risques liés aux chargements intraday, quotidiens et mensuels. Ne présume pas connaître les dépendances Control-M exactes si elles ne sont pas accessibles.
 
-Étudie au moins un SAT et un MAS réellement configurés dans DF6, ainsi que la particularité des satellites rattachés aux LINK.
+### 3. Impact sur les KO et les HDIFF
 
-**Question centrale : sommes-nous techniquement capables d'identifier une version Vault pertinente pour comparer les colonnes du payload, ou seulement de constater l'absence du couple HK/HDIFF dans l'historique ?**
+Analyse particulièrement ces situations :
 
-Si le code des loaders est dans un package externe, inspecte la version accessible ; sinon, distingue clairement ce qui est démontré de ce qui reste inconnu.
+- Source mise à jour mais chargement Vault pas encore terminé.
+- Ligne source historique dont le HDIFF correspond à une ancienne version du satellite.
+- Nouvelle correction source produisant un HDIFF déjà historisé.
+- Chargement partiel ou reprise d'un traitement.
+- Source `_delta_histo` contenant plusieurs états successifs d'une même HK.
 
-### 2. Vérifier la fidélité des calculs de HDIFF
+Pour chaque situation, indique si notre contrôle actuel retourne OK ou KO, si le résultat est fonctionnellement pertinent et quels risques de faux OK ou faux KO existent.
 
-Compare précisément le calcul de `source_hdiff_expression()` dans notre moteur d'audit avec celui du pattern de chargement réellement utilisé.
+Distingue bien un écart de périmètre temporel d'une véritable divergence des attributs métier.
 
-Analyse :
-- L'ordre et la sélection des champs `payload` du JSON.
-- Les transformations et casts selon `col_type`.
-- Les valeurs NULL, chaînes vides, dates et timestamps.
-- Les décimaux et la représentation des nombres.
-- Les filtres, expressions ou transformations appliqués avant le calcul.
-- Les différences potentielles entre une valeur source brute, une valeur transformée et une valeur stockée dans le Vault.
+### 4. Conséquences pour notre futur diagnostic
 
-Identifie les divergences réelles possibles entre le loader et l'audit, avec les fichiers/fonctions concernés.
+Réponds précisément :
 
-Je veux surtout savoir **si un HDIFF absent peut être provoqué par notre propre reconstruction du hash alors que les données métier ont été correctement chargées**.
+- La comparaison avec le dernier `ldts` est-elle suffisante pour identifier les colonnes divergentes ?
+- Dans quels cas cette comparaison peut-elle être trompeuse ?
+- Peut-on identifier un état Vault de référence plus pertinent avec les informations déjà disponibles ?
+- Quelles informations manquent éventuellement à notre moteur pour produire un diagnostic fiable ?
+- Faut-il enrichir seulement le diagnostic ou envisager une évolution de certaines règles de contrôle ? Ne propose de modifier une règle que si un problème concret est démontré.
 
-Propose les tests ciblés permettant de vérifier cette cohérence, sans les implémenter pour le moment.
+### 5. Bilan attendu
 
-### 3. Examiner la faisabilité d'un diagnostic automatique
+Je veux une analyse factuelle, appuyée sur des fonctions et des JSON réels, comprenant :
 
-À partir du code actuel de `control_logic.py`, `models.py` et `audit_store.py`, explique comment nous pourrions :
+1. Le périmètre effectivement contrôlé aujourd'hui.
+2. Un tableau des scénarios à risque, avec le résultat attendu.
+3. Les limites fonctionnelles démontrées du moteur actuel.
+4. Les implications pour la comparaison des payloads et le diagnostic HDIFF.
+5. Ta recommandation pour obtenir un moteur fiable en recette et en exploitation.
 
-1. Conserver le calcul principal et les statuts actuels.
-2. Récupérer uniquement les anomalies pertinentes après l'anti-jointure.
-3. Retrouver les lignes sources originales et les versions Vault comparables.
-4. Comparer les colonnes du payload selon les mêmes règles que le loader.
-5. Extraire uniquement les noms des colonnes divergentes.
-6. Éviter les diagnostics erronés lorsqu'aucune version comparable n'est identifiable.
+Distingue systématiquement ce qui est confirmé par le code de ce qui reste hypothétique.
 
-Vérifie particulièrement ce qui reste disponible après les `groupBy`, les transformations et la limite actuelle de 1 000 détails.
-
-Précise les risques de jointures multiples, les besoins en colonnes intermédiaires et les conséquences Spark sur la volumétrie.
-
-### 4. Déterminer le meilleur format de restitution
-
-Compare les solutions suivantes dans notre architecture V2 réelle :
-
-**A.** Enrichir le JSON `AUDIT_DETAIL_V2.key_values` avec un diagnostic.
-
-**B.** Ajouter une colonne dédiée, par exemple `mismatch_columns`, à `AUDIT_DETAIL_V2`.
-
-**C.** Créer une table complémentaire de diagnostic contenant le contexte du contrôle, les clés de rapprochement, le type d'anomalie et les colonnes divergentes.
-
-**D.** Produire un diagnostic à la demande plutôt que lors de chaque run.
-
-**E.** Séparer les types d'anomalies en plusieurs `test_id`, comme dans ton rapport précédent, ou conserver les `test_id` existants avec une qualification de l'anomalie.
-
-Pour chaque solution, précise :
-- Sa faisabilité réelle avec le code existant.
-- Le coût Spark prévisible et les données supplémentaires à relire.
-- L'impact sur les tables V2, les schémas et les écritures.
-- La facilité d'exploitation directement dans Hue.
-- Le comportement en cas de plusieurs versions historisées.
-- Les risques de mauvaise interprétation métier.
-- La complexité de développement et de maintenance.
-
-Nous voulons éviter une V3 ou de nouvelles tables si elles n'apportent pas une valeur suffisante, mais nous sommes ouverts à une table complémentaire si c'est réellement la solution la plus propre.
-
-### 5. Présentation métier souhaitée
-
-Analyse la possibilité de produire un résultat comme :
-
-- Source : table source réellement contrôlée.
-- Cible : satellite ou MAS concerné.
-- HK et discriminants éventuels.
-- HDIFF attendu.
-- Type d'anomalie : identité absente / état descriptif non retrouvé / comparaison impossible.
-- Colonnes divergentes : liste des noms de colonnes, lorsque la comparaison est fiable.
-
-En première intention, nous privilégions **les noms des colonnes divergentes**, sans stocker systématiquement les valeurs métier en clair.
-
-Détermine si les valeurs source et Vault peuvent être conservées comme diagnostic optionnel, sans introduire inutilement de données sensibles dans les audits.
-
-Montre deux ou trois exemples illustratifs de résultats attendus, notamment un KO sans identité Vault et un KO avec HDIFF divergent.
-
-### 6. Recommandation finale attendue
-
-Je veux un arbitrage technique argumenté répondant à quatre questions :
-
-1. Quel mécanisme serait le plus fiable fonctionnellement pour nos SAT, MAS, LINK-SAT et LINK-MAS ?
-2. Quel mécanisme serait le plus simple à maintenir et le moins coûteux en Spark ?
-3. Comment intégrer cette fonctionnalité sans remettre en cause les 13 contrôles et les tables d'audit V2 déjà opérationnelles ?
-4. Quelles vérifications sont indispensables avant toute implémentation ?
-
-Présente un tableau comparatif, une recommandation priorisée et un plan de mise en œuvre en petites étapes testables.
-
-Appuie les conclusions sur des fonctions, schémas et JSON réels. Distingue clairement les faits confirmés, les risques théoriques et les informations non vérifiables.
-
-**Ne réexplique pas longuement la logique générale des HK/HDIFF déjà connue. Concentre-toi sur les problèmes concrets de correspondance des versions, de fidélité du hash, de disponibilité du payload et de coût du diagnostic.**
-
-Aucun changement des règles métier, aucune modification du moteur, aucune exécution réelle, aucune opération Hive, aucun déploiement.
+**Analyse uniquement. Aucune modification, aucun test réel Hive, aucun commit. Pas de dashboard ni de refonte du moteur.**
